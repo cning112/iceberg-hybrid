@@ -4,6 +4,7 @@ import com.yourorg.iceberg.hybrid.domain.*;
 import com.yourorg.iceberg.hybrid.ports.*;
 import java.util.*;
 import java.util.stream.Collectors;
+import java.util.Comparator;
 
 public final class ReplicationPlanner {
 
@@ -23,16 +24,23 @@ public final class ReplicationPlanner {
   }
 
   public PlanResult plan(TableId tableId, SnapshotId snapshotId, InventoryPort.InventoryIndex idx) {
-    var srcSnapshot = srcCatalog.listSnapshots(tableId).stream()
+    var toSnapshot = srcCatalog.listSnapshots(tableId).stream()
         .filter(s -> s.id().equals(snapshotId))
         .findFirst().orElseThrow();
 
-    var allFiles = srcSnapshot.manifests().stream()
+    var fromSnapshot = dstCatalog.listSnapshots(tableId).stream()
+        .max(Comparator.comparing(s -> s.id().sequenceNumber()));
+
+    var fromManifests = fromSnapshot.map(s -> s.manifests().stream().map(Manifest::path).collect(Collectors.toSet()))
+        .orElse(Collections.emptySet());
+
+    var newFiles = toSnapshot.manifests().stream()
+        .filter(m -> !fromManifests.contains(m.path()))
         .flatMap(m -> m.files().stream())
         .collect(Collectors.toList());
 
     List<FileRef> toCopy = new ArrayList<>();
-    for (var f : allFiles) {
+    for (var f : newFiles) {
       boolean exists = inventory.contains(idx, f.path(), f.etag(), f.size());
       if (!exists) {
         var st = objDst.stat(f.path());
