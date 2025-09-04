@@ -6,6 +6,32 @@ import java.util.*;
 import java.util.stream.Collectors;
 import java.util.Comparator;
 
+/**
+ * Application service responsible for calculating replication plans between environments.
+ * 
+ * <p>The ReplicationPlanner implements the core "snapshot diffing" strategy described in
+ * the system design. It analyzes the difference between the current state of the 
+ * Source-of-Truth (SoT) and the cloud mirror to determine exactly which files need
+ * to be copied for replication.
+ * 
+ * <p>Key optimizations implemented:
+ * <ul>
+ * <li><strong>Incremental replication:</strong> Only copies new/changed files since last sync</li>
+ * <li><strong>Inventory-based deduplication:</strong> Uses cloud inventory to avoid unnecessary transfers</li>
+ * <li><strong>ETag verification:</strong> Validates file integrity to prevent corrupted replicas</li>
+ * <li><strong>Size checking:</strong> Additional verification layer for data consistency</li>
+ * </ul>
+ * 
+ * <p>The planning algorithm:
+ * <ol>
+ * <li>Identifies the latest snapshot in the destination (cloud) catalog</li>
+ * <li>Compares manifests between source snapshot and destination to find new files</li>
+ * <li>Filters out files already present in cloud storage using inventory and stat checks</li>
+ * <li>Returns a minimal set of objects that require copying</li>
+ * </ol>
+ * 
+ * @see com.yourorg.iceberg.hybrid.app.StateReconciler for the promotion phase
+ */
 public final class ReplicationPlanner {
 
   private final CatalogPort srcCatalog;
@@ -23,6 +49,24 @@ public final class ReplicationPlanner {
     this.objDst = objDst;
   }
 
+  /**
+   * Creates a replication plan for syncing a specific snapshot to the cloud mirror.
+   * 
+   * <p>This method implements the core diffing algorithm that determines the minimal
+   * set of files needed to replicate a snapshot from the source to destination catalog.
+   * 
+   * <p>The algorithm performs three levels of deduplication:
+   * <ol>
+   * <li>Manifest-level: Compare manifests between source and destination snapshots</li>
+   * <li>Inventory-level: Check cloud inventory for existing files</li>
+   * <li>Object-level: Verify individual file existence and integrity via stat calls</li>
+   * </ol>
+   * 
+   * @param tableId the table being replicated
+   * @param snapshotId the specific snapshot to replicate from source
+   * @param idx cloud inventory index for efficient file existence checking
+   * @return plan containing list of object URIs that need to be copied
+   */
   public PlanResult plan(TableId tableId, SnapshotId snapshotId, InventoryPort.InventoryIndex idx) {
     var toSnapshot = srcCatalog.listSnapshots(tableId).stream()
         .filter(s -> s.id().equals(snapshotId))
