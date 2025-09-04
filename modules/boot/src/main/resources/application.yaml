@@ -1,0 +1,6 @@
+hybrid:
+  role: onprem # or cloud
+  gc:
+    safety:
+      onpremDelaySeconds: 86400
+      cloudDelaySeconds: 172800

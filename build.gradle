@@ -1,0 +1,31 @@
+plugins {
+    id 'java'
+}
+
+allprojects {
+    group = 'com.yourorg.iceberg.hybrid'
+    version = '0.1.0'
+}
+
+subprojects {
+    apply plugin: 'java'
+
+    java {
+        toolchain {
+            languageVersion = JavaLanguageVersion.of(21)
+        }
+    }
+
+    repositories {
+        mavenCentral()
+    }
+
+    dependencies {
+        testImplementation 'org.junit.jupiter:junit-jupiter:5.11.0'
+        testImplementation 'org.assertj:assertj-core:3.26.3'
+    }
+
+    test {
+        useJUnitPlatform()
+    }
+}

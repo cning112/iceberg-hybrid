@@ -1,0 +1,7 @@
+dependencies {
+  implementation project(":modules:domain")
+  implementation project(":modules:ports")
+  
+    // implementation 'software.amazon.awssdk:s3:2.25.60' // add when using AWS SDK v2
+
+}

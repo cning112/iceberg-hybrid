@@ -1,0 +1,8 @@
+plugins {
+    id 'me.champeau.jmh' version '0.7.2'
+}
+
+dependencies {
+    implementation project(":modules:ports")
+    implementation project(":modules:adapters:inventory-s3")
+}

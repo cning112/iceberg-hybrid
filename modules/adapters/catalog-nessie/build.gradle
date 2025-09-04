@@ -1,0 +1,7 @@
+dependencies {
+  implementation project(":modules:domain")
+  implementation project(":modules:ports")
+  
+    // TODO: add Nessie client when wiring
+
+}

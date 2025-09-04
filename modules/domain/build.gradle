@@ -1,0 +1,3 @@
+dependencies {
+    // domain should be pure; no implementation deps
+}
