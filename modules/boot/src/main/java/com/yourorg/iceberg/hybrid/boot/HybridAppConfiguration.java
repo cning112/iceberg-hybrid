@@ -1,9 +1,9 @@
 package com.yourorg.iceberg.hybrid.boot;
 
-import com.yourorg.iceberg.hybrid.adapters.catalog.nessie.NessieCatalogAdapter;
-import com.yourorg.iceberg.hybrid.adapters.infra.redis.RedisInfraAdapters.InMemoryConsistencyAdapter;
-import com.yourorg.iceberg.hybrid.adapters.inventory.s3.S3InventoryAdapter;
-import com.yourorg.iceberg.hybrid.adapters.storage.s3.S3ObjectStoreAdapter;
+import com.yourorg.iceberg.hybrid.adapters.catalog.nessie.NessieCatalogStub;
+import com.yourorg.iceberg.hybrid.adapters.infra.redis.RedisInfraAdapters.InMemoryConsistencyStub;
+import com.yourorg.iceberg.hybrid.adapters.inventory.s3.S3InventoryStub;
+import com.yourorg.iceberg.hybrid.adapters.storage.s3.S3ObjectStoreStub;
 import com.yourorg.iceberg.hybrid.app.*;
 import com.yourorg.iceberg.hybrid.domain.*;
 import com.yourorg.iceberg.hybrid.ports.*;
@@ -27,28 +27,28 @@ public class HybridAppConfiguration {
     @Bean
     public CatalogPort onPremCatalog() {
         System.out.println("Creating On-Prem Catalog Bean (in-memory)");
-        return new NessieCatalogAdapter();
+        return new NessieCatalogStub();
     }
 
     @Bean
     public CatalogPort cloudCatalog() {
         System.out.println("Creating Cloud Catalog Bean (in-memory)");
-        return new NessieCatalogAdapter();
+        return new NessieCatalogStub();
     }
 
     @Bean
     public ObjectStorePort cloudStore() {
-        return new S3ObjectStoreAdapter();
+        return new S3ObjectStoreStub();
     }
 
     @Bean
     public InventoryPort cloudInventory() {
-        return new S3InventoryAdapter();
+        return new S3InventoryStub();
     }
 
     @Bean
     public ConsistencyPort consistencyService() {
-        return new InMemoryConsistencyAdapter();
+        return new InMemoryConsistencyStub();
     }
 
     // --- Application Service Beans (The core logic) ---
@@ -106,7 +106,7 @@ public class HybridAppConfiguration {
             if (plan.objectsToCopy().size() != 2) throw new AssertionError("Expected 2 objects to copy, but got " + plan.objectsToCopy().size());
 
             // 4. "Copy": Simulate files being physically copied to the cloud store
-            if (cloudStore instanceof S3ObjectStoreAdapter s) {
+            if (cloudStore instanceof S3ObjectStoreStub s) {
                 s.put(f1.path(), f1.size(), f1.etag());
                 s.put(f2.path(), f2.size(), f2.etag());
             }

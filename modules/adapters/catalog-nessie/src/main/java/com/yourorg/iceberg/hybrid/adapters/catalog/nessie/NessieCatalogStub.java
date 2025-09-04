@@ -5,7 +5,7 @@ import com.yourorg.iceberg.hybrid.ports.CatalogPort;
 import java.time.Instant;
 import java.util.*;
 
-public final class NessieCatalogAdapter implements CatalogPort {
+public class NessieCatalogStub implements CatalogPort {
 
   // In-memory stub storage for now
   private final Map<TableId, TableMetadata> meta = new HashMap<>();

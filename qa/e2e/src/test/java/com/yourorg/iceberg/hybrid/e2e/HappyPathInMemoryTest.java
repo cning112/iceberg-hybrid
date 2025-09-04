@@ -1,10 +1,10 @@
 package com.yourorg.iceberg.hybrid.e2e;
 
-import com.yourorg.iceberg.hybrid.adapters.catalog.nessie.NessieCatalogAdapter;
-import com.yourorg.iceberg.hybrid.adapters.infra.redis.RedisInfraAdapters.InMemoryConsistencyAdapter;
-import com.yourorg.iceberg.hybrid.adapters.infra.redis.RedisInfraAdapters.InMemoryLeaseAdapter;
-import com.yourorg.iceberg.hybrid.adapters.inventory.s3.S3InventoryAdapter;
-import com.yourorg.iceberg.hybrid.adapters.storage.s3.S3ObjectStoreAdapter;
+import com.yourorg.iceberg.hybrid.adapters.catalog.nessie.NessieCatalogStub;
+import com.yourorg.iceberg.hybrid.adapters.infra.redis.RedisInfraAdapters.InMemoryConsistencyStub;
+import com.yourorg.iceberg.hybrid.adapters.infra.redis.RedisInfraAdapters.InMemoryLeaseStub;
+import com.yourorg.iceberg.hybrid.adapters.inventory.s3.S3InventoryStub;
+import com.yourorg.iceberg.hybrid.adapters.storage.s3.S3ObjectStoreStub;
 import com.yourorg.iceberg.hybrid.app.*;
 import com.yourorg.iceberg.hybrid.domain.*;
 import com.yourorg.iceberg.hybrid.ports.*;
@@ -21,12 +21,12 @@ public class HappyPathInMemoryTest {
   @Test
   void commit_replicate_verify_promote_and_route() {
     // Setup adapters (in-memory stubs)
-    CatalogPort onPrem = new NessieCatalogAdapter();
-    CatalogPort cloud = new NessieCatalogAdapter();
-    ObjectStorePort cloudStore = new S3ObjectStoreAdapter();
-    InventoryPort inventory = new S3InventoryAdapter();
-    var lease = new InMemoryLeaseAdapter();
-    var token = new InMemoryConsistencyAdapter();
+    CatalogPort onPrem = new NessieCatalogStub();
+    CatalogPort cloud = new NessieCatalogStub();
+    ObjectStorePort cloudStore = new S3ObjectStoreStub();
+    InventoryPort inventory = new S3InventoryStub();
+    var lease = new InMemoryLeaseStub();
+    var token = new InMemoryConsistencyStub();
 
     var table = new TableId("demo", "orders");
     var snapId = new SnapshotId("s-1", 1L, Instant.now());
@@ -46,7 +46,7 @@ public class HappyPathInMemoryTest {
     assertThat(plan.objectsToCopy()).containsExactlyInAnyOrder(f1.path(), f2.path());
 
     // "Copy": simulate content presence
-    if (cloudStore instanceof S3ObjectStoreAdapter s) {
+    if (cloudStore instanceof S3ObjectStoreStub s) {
       s.put(f1.path(), f1.size(), f1.etag());
       s.put(f2.path(), f2.size(), f2.etag());
     }

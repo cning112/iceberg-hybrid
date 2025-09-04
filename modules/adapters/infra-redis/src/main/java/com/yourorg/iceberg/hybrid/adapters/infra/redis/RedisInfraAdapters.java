@@ -7,7 +7,7 @@ import java.util.*;
 
 public final class RedisInfraAdapters {
 
-  public static final class InMemoryLeaseAdapter implements LeasePort {
+  public static final class InMemoryLeaseStub implements LeasePort {
     private final Map<String, QueryLease> leases = new HashMap<>();
 
     @Override
@@ -34,7 +34,7 @@ public final class RedisInfraAdapters {
     }
   }
 
-  public static final class InMemoryConsistencyAdapter implements ConsistencyPort {
+  public static final class InMemoryConsistencyStub implements ConsistencyPort {
     private final Map<TableId, ConsistencyToken> tokens = new HashMap<>();
     @Override public java.util.Optional<ConsistencyToken> loadToken(TableId tableId) {
       return java.util.Optional.ofNullable(tokens.get(tableId));

@@ -4,7 +4,7 @@ import com.yourorg.iceberg.hybrid.ports.InventoryPort;
 import java.util.HashSet;
 import java.util.Set;
 
-public final class S3InventoryAdapter implements InventoryPort {
+public class S3InventoryStub implements InventoryPort {
 
   public static final class Index implements InventoryIndex {
     private final String version;

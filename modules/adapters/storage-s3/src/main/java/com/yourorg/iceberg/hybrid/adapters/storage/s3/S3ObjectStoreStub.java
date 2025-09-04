@@ -4,7 +4,7 @@ import com.yourorg.iceberg.hybrid.ports.ObjectStorePort;
 import java.time.Instant;
 import java.util.*;
 
-public final class S3ObjectStoreAdapter implements ObjectStorePort {
+public class S3ObjectStoreStub implements ObjectStorePort {
 
   // For now, pretend everything exists in destination to let tests pass;
   // replace with real AWS SDK integration.
