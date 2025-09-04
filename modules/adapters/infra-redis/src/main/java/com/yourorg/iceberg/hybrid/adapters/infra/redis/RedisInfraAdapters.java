@@ -43,4 +43,24 @@ public final class RedisInfraAdapters {
       tokens.put(tableId, token);
     }
   }
+
+  public static final class InMemoryMetricsStub implements MetricsPort {
+    private final Map<String, Long> counters = new HashMap<>();
+    private final Map<String, Double> observations = new HashMap<>();
+
+    @Override 
+    public void increment(String name, long delta) {
+      counters.merge(name, delta, Long::sum);
+      System.out.println("METRICS: Incremented '" + name + "' by " + delta + " (total: " + counters.get(name) + ")");
+    }
+
+    @Override 
+    public void observe(String name, double value) {
+      observations.put(name, value);
+      System.out.println("METRICS: Observed '" + name + "' value: " + value);
+    }
+
+    public Map<String, Long> getCounters() { return new HashMap<>(counters); }
+    public Map<String, Double> getObservations() { return new HashMap<>(observations); }
+  }
 }

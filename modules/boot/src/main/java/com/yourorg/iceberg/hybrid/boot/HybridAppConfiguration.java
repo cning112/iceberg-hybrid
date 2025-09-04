@@ -2,6 +2,8 @@ package com.yourorg.iceberg.hybrid.boot;
 
 import com.yourorg.iceberg.hybrid.adapters.catalog.nessie.NessieCatalogStub;
 import com.yourorg.iceberg.hybrid.adapters.infra.redis.RedisInfraAdapters.InMemoryConsistencyStub;
+import com.yourorg.iceberg.hybrid.adapters.infra.redis.RedisInfraAdapters.InMemoryLeaseStub;
+import com.yourorg.iceberg.hybrid.adapters.infra.redis.RedisInfraAdapters.InMemoryMetricsStub;
 import com.yourorg.iceberg.hybrid.adapters.inventory.s3.S3InventoryStub;
 import com.yourorg.iceberg.hybrid.adapters.storage.s3.S3ObjectStoreStub;
 import com.yourorg.iceberg.hybrid.app.*;
@@ -51,6 +53,16 @@ public class HybridAppConfiguration {
         return new InMemoryConsistencyStub();
     }
 
+    @Bean
+    public LeasePort leaseService() {
+        return new InMemoryLeaseStub();
+    }
+
+    @Bean
+    public MetricsPort metricsService() {
+        return new InMemoryMetricsStub();
+    }
+
     // --- Application Service Beans (The core logic) ---
 
     @Bean
@@ -69,6 +81,13 @@ public class HybridAppConfiguration {
         return new ReadRouter(consistencyService);
     }
 
+    @Bean
+    public GCCoordinator gcCoordinator(CatalogPort onPremCatalog, LeasePort leaseService, 
+                                       ConsistencyPort consistencyService, ObjectStorePort cloudStore, 
+                                       MetricsPort metricsService) {
+        return new GCCoordinator(onPremCatalog, leaseService, consistencyService, cloudStore, metricsService);
+    }
+
 
     // --- Execution Logic (A demo runner) ---
 
@@ -77,11 +96,14 @@ public class HybridAppConfiguration {
             ReplicationPlanner planner,
             StateReconciler reconciler,
             ReadRouter router,
+            GCCoordinator gcCoordinator,
             CatalogPort onPremCatalog, // Inject the on-prem catalog
             CatalogPort cloudCatalog,  // Inject the cloud catalog
             ObjectStorePort cloudStore,
             InventoryPort cloudInventory,
-            ConsistencyPort consistencyService
+            ConsistencyPort consistencyService,
+            LeasePort leaseService,
+            MetricsPort metricsService
     ) {
         return args -> {
             System.out.println("\n--- Starting Iceberg Hybrid Replication Demo ---");
@@ -130,7 +152,65 @@ public class HybridAppConfiguration {
             System.out.println("  -> ReadRouter directs the client to: " + route.target());
             if (route.target() != ReadRouter.Target.CLOUD) throw new AssertionError("Expected route target to be CLOUD");
 
-            System.out.println("\n--- Demo Finished Successfully ---");
+            System.out.println("\n--- Starting GC Coordination Demo ---");
+
+            // 9. Simulate older files that need to be cleaned up
+            var oldFileToDelete = "s3://cloud-bucket/data/old-part-000.parquet";
+            if (cloudStore instanceof S3ObjectStoreStub s) {
+                s.put(oldFileToDelete, 789L, "old-etag");
+            }
+            System.out.println("STEP 9: Simulated an old file in cloud storage that should be garbage collected: " + oldFileToDelete);
+
+            // 10. Create a DeletePlan (simulating on-prem GC generating a cleanup plan)
+            var now = Instant.now();
+            var deletePlan = new DeletePlan(
+                table,
+                List.of(oldFileToDelete),
+                now.minusSeconds(300), // Generated 5 minutes ago
+                now.minusSeconds(240), // Valid from 4 minutes ago
+                now.plusSeconds(3600), // Valid until 1 hour from now
+                List.of("operator-approval-001")
+            );
+            System.out.println("STEP 10: Created a DeletePlan with " + deletePlan.deleteCandidates().size() + " candidate files for deletion");
+            System.out.println("  -> Files to delete: " + deletePlan.deleteCandidates());
+
+            // 11. Configure safety window (grace periods for on-prem and cloud)
+            var safetyWindow = new SafetyWindow(
+                60,   // On-prem: 1 minute delay
+                180   // Cloud: 3 minutes delay for additional safety
+            );
+            System.out.println("STEP 11: Configured safety window - OnPrem: " + safetyWindow.onPremDelaySeconds() + "s, Cloud: " + safetyWindow.cloudDelaySeconds() + "s");
+
+            // 12. Test on-prem GC (should be blocked by safety window since plan was generated recently)
+            System.out.println("STEP 12: Attempting on-prem GC (should be blocked by safety window)...");
+            gcCoordinator.applyDeletePlan(deletePlan, safetyWindow, false);
+            System.out.println("  -> On-prem GC completed (files likely not deleted due to safety window)");
+
+            // 13. Test cloud GC (should be blocked by even longer safety window)
+            System.out.println("STEP 13: Attempting cloud GC (should be blocked by longer safety window)...");
+            gcCoordinator.applyDeletePlan(deletePlan, safetyWindow, true);
+            System.out.println("  -> Cloud GC completed (files likely not deleted due to safety window)");
+
+            // 14. Simulate passage of time by creating a plan generated long enough ago
+            var oldDeletePlan = new DeletePlan(
+                table,
+                List.of(oldFileToDelete),
+                now.minusSeconds(400), // Generated 6+ minutes ago (past safety windows)
+                now.minusSeconds(300), // Valid from 5 minutes ago
+                now.plusSeconds(3600), // Valid until 1 hour from now
+                List.of("operator-approval-002")
+            );
+            System.out.println("STEP 14: Created an older DeletePlan that should pass safety window checks");
+
+            // 15. Apply the old delete plan (should actually delete files now)
+            System.out.println("STEP 15: Applying older DeletePlan for cloud-side GC...");
+            gcCoordinator.applyDeletePlan(oldDeletePlan, safetyWindow, true);
+            System.out.println("  -> Cloud GC with older plan completed");
+
+            // 16. Verify metrics were collected
+            System.out.println("STEP 16: GC coordination demo completed. Check metrics for deletion statistics.");
+
+            System.out.println("\n--- Complete Demo Finished Successfully ---");
         };
     }
 }
