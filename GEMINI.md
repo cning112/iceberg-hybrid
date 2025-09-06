@@ -2,65 +2,76 @@
 
 ## 1. Project Overview & Core Purpose
 
-This project implements a **hybrid Apache Iceberg deployment model**. The central goal, as detailed in `DESIGN.md`, is to maintain a primary, writable Iceberg database on-premise while replicating it to a **read-only mirror** in a cloud environment (AWS/GCP).
+This project implements a **geo-distributed, high-availability Apache Iceberg deployment model**. The central goal is to support transactional data lake operations (reads and writes) from multiple geographic locations simultaneously, while ensuring low latency for local operations and maintaining global data consistency.
 
-This architecture ensures that on-prem write operations can continue uninterrupted even if the cloud control plane is down, establishing the on-prem catalog as the **Single Source of Truth (SoT)**. Cloud-based analytics platforms (like BigQuery, Dataproc, or Trino) can then query the replicated data with a predictable, low-latency delay.
+This architecture enables true multi-site read/write capabilities, making it suitable for global enterprises that require a single, consistent view of their data lake across disparate cloud and on-premise environments.
 
 **Core Principles:**
-*   **Single Source of Truth (SoT):** All writes happen on-premise through a single REST Catalog.
-*   **Commit Consistency:** The cloud mirror is updated atomically, preventing partial or inconsistent views of the data.
-*   **Decoupled Operations:** Replication, garbage collection, and data consumption are designed as independent, coordinated processes.
+*   **Single Source of Truth (for Metadata):** A globally consistent, transactional catalog (Project Nessie) acts as the single source of truth for all table metadata commits.
+*   **Geo-Distributed Writes & Reads:** Write jobs execute in their local environment for performance, and read jobs query a complete, localized data replica for low latency.
+*   **High Availability:** The architecture is designed to be resilient to the failure of any single geographic location, for both read and write operations.
+*   **Decoupled Synchronization:** Data replication and metadata localization are handled by a decentralized mesh of services, ensuring no single point of failure in the data plane.
 
 **Key Technologies:**
 *   **Language:** Java 21
 *   **Build Tool:** Gradle
-*   **Core Framework:** Apache Iceberg
-*   **Architecture:** Hexagonal (Ports & Adapters)
+*   **Core Frameworks:** Apache Iceberg, Project Nessie
+*   **Architecture:** Decoupled Control Plane (Catalog) and Data Plane (Synchronization)
 
 ---
 
 ## 2. Architecture and Data Flow
 
-The system is split between an "On-Prem Side" and a "Cloud Side". The data flows in one direction: from on-prem to the cloud.
+The system is a peer-to-peer network of locations, coordinated by a central catalog. Each location can support both reads and writes, and is responsible for synchronizing data with all other locations.
 
 ```
-On-Prem                                     Cloud
-------------------------------------        ------------------------------------
-[Write Engines (Spark/Flink)]
-       │
-       ▼
-[REST Catalog (SoT)] ◄───────► [Object Storage (MinIO/S3)]
-       │                                │
-       │ (New Snapshot vN)              │ (Data Files)
-       │                                │
-       ▼                                ▼
-[Replicator Service] ───────────► [Cloud Storage (GCS/S3)]
-       │ (Replication Plan)             │ (Objects + _inprogress/vN.marker)
-       │                                │
-       │                                ▼
-       │                         [Follower/Synchronizer Service]
-       │                                │ (Reads _ready/vN.marker)
-       │                                ▼
-       │                         [BLMS (Read-Only Catalog)]
-       │                                │
-       │                                ▼
-       │                         [Query Engines (BigQuery)]
+                                  ┌──────────────────────────────────┐
+                                  │      Global Transactional        │
+                                  │ Catalog (Nessie + CockroachDB/DynamoDB) │
+                                  └──────────────────┬─────────────────┘
+                                                     │ (Commits to 'main' branch)
+                                                     │
+                         ┌───────────────────────────┴───────────────────────────┐
+                         │ (Write jobs commit metadata with absolute, hetero URIs) │
+                         ▼                                                       ▼
+┌──────────────────────────────────┐                          ┌──────────────────────────────────┐
+│        Location: US-East         │                          │        Location: EU-Central      │
+│                                  │                          │                                  │
+│  [Write/Query Engines]           │                          │  [Write/Query Engines]           │
+│           │                      │                          │           │                      │
+│           ▼                      │                          │           ▼                      │
+│  ┌───────────────────┐           │                          │  ┌───────────────────┐           │
+│  │   S3 Storage      │◄─────────┼──────────────────────────┼──►│   S3 Storage      │           │
+│  │ (us-east-1)       │  (Sync)   │                          │  │ (eu-central-1)    │           │
+│  └───────────────────┘           │                          │  └───────────────────┘           │
+│           ▲                      │                          │           ▲                      │
+│           │ (Reads from local)   │                          │           │ (Reads from local)   │
+│           │                      │                          │           │                      │
+│  ┌───────────────────┐           │                          │  ┌───────────────────┐           │
+│  │  Sync Service     ├───────────┘                          └───────────┤  Sync Service     │           │
+│  │  (Airflow + Rclone)│                                                │  (Airflow + Rclone)│           │
+│  └───────────────────┘                                                └───────────────────┘           │
+│           │                                                                     │                      │
+│           └────────────► Reads 'main', Writes 'main_replica_us' ◄────────────┘                      │
+│                                                                                                      │
+└──────────────────────────────────┘                          └──────────────────────────────────┘
 ```
-
-### Key Components & Code Implementation
-
-| Design Component | Code Implementation | Purpose |
-| :--- | :--- | :--- |
-| **REST Catalog (SoT)** | `ports/CatalogPort` (on-prem impl) | The single source of truth for all table metadata and commits. |
-| **Replicator (复制器)** | `app/ReplicationPlanner.java` | Calculates the difference between the on-prem (vN) and cloud (vK) snapshots and creates a plan to copy only the new files. This implements the **snapshot diffing** (`快照差分`) strategy. |
-| **Marker Files (哨兵文件)** | `_inprogress/` & `_ready/` dirs | Sentinel files in cloud storage that signal the state of replication. The `Replicator` writes an `_inprogress` marker, and the `Follower` promotes it to `_ready` after verification. |
-| **Follower/Synchronizer (同步器)** | `app/StateReconciler.java` | Triggered by the presence of a marker. The `verifyAndPromote` method validates that all files in the snapshot exist in cloud storage and then updates the read-only cloud catalog (BLMS) to make the new snapshot visible. This is the second phase of the **two-phase marker** system. |
-| **GC Coordinator (垃圾回收协同)** | `app/GCCoordinator.java` | Implements the safe, coordinated garbage collection process. It uses a `DeletePlan` from the SoT and a `SafetyWindow` (grace period) to ensure data isn't deleted from cloud storage while it's still being queried. |
-| **Read Router** | `app/ReadRouter.java` | An application-level component (not explicitly in the core replication design) that can direct read queries to either on-prem or the cloud based on a defined policy and data freshness (`ConsistencyToken`). |
 
 ---
 
-## 3. Building and Running
+## 3. Key Components & Code Implementation
+
+| Design Component | Code Implementation / Technology | Purpose |
+| :--- | :--- | :--- |
+| **Global Transactional Catalog** | **Project Nessie** service cluster, backed by a distributed DB like **CockroachDB** or a managed service like **DynamoDB**. | The single source of truth for all metadata transactions. Provides atomic commits and consistent branching logic. |
+| **Synchronization Service** | A decentralized mesh of services, likely implemented with **Apache Airflow**. One instance per location. | Orchestrates the two-phase synchronization process: pulling foreign data files and localizing metadata. |
+| **Data Mover** | **Rclone**, called by the Synchronization Service. | The "muscle" that performs the physical, idempotent, and parallel copying of data files between heterogeneous storage backends. |
+| **Storage Registry** | A shared JSON/YAML configuration file. | A lookup service for the Synchronization Service to resolve foreign storage path prefixes to credentials and API endpoints. |
+| **Localized Replica Branch** | A branch in Nessie, e.g., `main_replica_us`. | A read-only, localized version of the metadata, containing only paths to local storage. This is the entry point for local query engines. |
+
+---
+
+## 4. Building and Running
 
 ### Building the Project
 
@@ -76,20 +87,16 @@ To run all standard unit and integration tests:
 ./gradlew test
 ```
 
-To run the end-to-end tests that use Testcontainers:
+To run the end-to-end tests that use Testcontainers (e.g., testing against a local Nessie/MinIO setup):
 ```bash
 ./gradlew :qa:e2e:test --tests "*Containers*" -Dgroups=containers
 ```
 
 ---
 
-## 4. Development Conventions
+## 5. Development Conventions
 
-*   **Design First:** The `DESIGN.md` document is the canonical source for the system's architecture and principles. Any significant changes or new features **must** align with this design.
-*   **Ports & Adapters:** The hexagonal architecture is strictly enforced.
-    *   **Domain (`modules/domain`):** Contains pure, framework-agnostic business objects.
-    *   **Ports (`modules/ports`):** Defines the interfaces for all external interactions (e.g., `CatalogPort`, `ObjectStorePort`).
-    *   **Application (`modules/app`):** Contains the core application logic that orchestrates the domain objects and ports.
-    *   **Adapters (`modules/adapters`):** Provides concrete implementations of the ports for specific technologies (e.g., S3, Redis, Nessie).
+*   **Design First:** The `iceberg-arch-geo-distributed-ha.md` document is the canonical source for the system's architecture and principles. Any significant changes or new features **must** align with this design.
+*   **Ports & Adapters:** The hexagonal architecture is strictly enforced, especially for the Synchronization Service, to keep orchestration logic separate from data-moving implementation.
 *   **Testing:** All new code should be accompanied by tests. Use JUnit 5 and AssertJ.
 *   **Immutability:** Domain objects are implemented as Java `record` classes where possible to promote immutability.

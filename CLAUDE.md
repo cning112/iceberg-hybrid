@@ -52,7 +52,7 @@ The codebase strictly follows hexagonal architecture:
 ## Development Guidelines
 
 ### Design First Approach
-All development must align with the comprehensive design documented in `DESIGN.md`. This Chinese-language document contains the canonical architecture, performance optimization strategies, and operational procedures.
+All development must align with the comprehensive design documented in `iceberg-arch-hybrid-replica-dr.md`. This Chinese-language document contains the canonical architecture, performance optimization strategies, and operational procedures.
 
 ### Code Style
 - Use Java 21 features and language constructs
@@ -78,7 +78,7 @@ When creating new adapters, follow the naming convention: `*Stub` suffix (e.g., 
 - **JMH** for microbenchmarks
 
 ## Performance Considerations
-The system implements several optimization strategies detailed in `DESIGN.md`:
+The system implements several optimization strategies detailed in `iceberg-arch-hybrid-replica-dr.md`:
 - Snapshot diffing to minimize object copying
 - Inventory indexing to avoid expensive LIST operations
 - Parallel replication with rate limiting
