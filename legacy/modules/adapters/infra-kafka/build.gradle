@@ -1,6 +1,6 @@
 dependencies {
-  implementation project(":modules:domain")
-  implementation project(":modules:ports")
+  implementation project(":legacy:modules:domain")
+  implementation project(":legacy:modules:ports")
   
     // implementation 'org.apache.kafka:kafka-clients:3.8.0' // when wiring to Kafka
 

@@ -1,0 +1,5 @@
+dependencies {
+  implementation project(":legacy:modules:domain")
+  implementation project(":legacy:modules:ports")
+  
+}

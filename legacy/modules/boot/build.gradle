@@ -1,0 +1,18 @@
+plugins { id 'org.springframework.boot' version '3.3.3' }
+apply plugin: 'io.spring.dependency-management'
+
+dependencies {
+    implementation project(":legacy:modules:domain")
+    implementation project(":legacy:modules:ports")
+    implementation project(":legacy:modules:app")
+
+    implementation project(":legacy:modules:adapters:catalog-nessie")
+    implementation project(":legacy:modules:adapters:storage-s3")
+    implementation project(":legacy:modules:adapters:inventory-s3")
+    implementation project(":legacy:modules:adapters:infra-redis")
+    implementation project(":legacy:modules:adapters:infra-kafka")
+
+    implementation 'org.springframework.boot:spring-boot-starter'
+
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+}

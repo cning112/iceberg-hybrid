@@ -1,0 +1,7 @@
+dependencies {
+  implementation project(":legacy:modules:domain")
+  implementation project(":legacy:modules:ports")
+  
+    // implementation 'redis.clients:jedis:5.1.2' // when wiring to Redis
+
+}

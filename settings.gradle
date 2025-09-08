@@ -1,15 +1,15 @@
 rootProject.name = "iceberg-hybrid"
 
 include(
-  "modules:domain",
-  "modules:ports",
-  "modules:app",
-  "modules:adapters:catalog-nessie",
-  "modules:adapters:storage-s3",
-  "modules:adapters:inventory-s3",
-  "modules:adapters:infra-redis",
-  "modules:adapters:infra-kafka",
-  "modules:boot",
-  "qa:e2e",
-  "qa:perf-jmh"
+  "legacy:modules:domain",
+  "legacy:modules:ports",
+  "legacy:modules:app",
+  "legacy:modules:adapters:catalog-nessie",
+  "legacy:modules:adapters:storage-s3",
+  "legacy:modules:adapters:inventory-s3",
+  "legacy:modules:adapters:infra-redis",
+  "legacy:modules:adapters:infra-kafka",
+  "legacy:modules:boot",
+  "legacy:qa:e2e",
+  "legacy:qa:perf-jmh"
 )
