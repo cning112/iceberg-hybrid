@@ -6,6 +6,81 @@
 
 ---
 
+<details>
+<summary><strong>目录 (Table of Contents)</strong></summary>
+
+- [1. 概述与目标](#1-概述与目标)
+    - [1.1 非目标（Non-Goals）](#11-非目标non-goals)
+    - [1.2 术语与命名约定（Glossary）](#12-术语与命名约定glossary)
+    - [1.3 术语一致性卡片（Cheat Sheet）](#13-术语一致性卡片cheat-sheet)
+- [2. 架构总览](#2-架构总览)
+- [3. 核心组件详述](#3-核心组件详述)
+    - [3.1 全局事务性目录](#31-全局事务性目录)
+    - [3.5 Nessie 部署拓扑（实例数量与角色）](#35-nessie-部署拓扑实例数量与角色)
+    - [3.6 提交门槛（Replica Commit Gate）](#36-提交门槛replica-commit-gate)
+    - [3.2 同步服务](#32-同步服务)
+    - [3.3 数据移动器](#33-数据移动器)
+    - [3.4 存储注册表 (Storage Registry)](#34-存储注册表-storage-registry)
+        - [3.4.1 Storage Registry Schema 与契约（全局单一注册表）](#341-storage-registry-schema-与契约全局单一注册表)
+        - [3.4.2 Registry 变更与一致性（Versioning & Atomic Rollout）](#342-registry-变更与一致性versioning--atomic-rollout)
+- [4. 关键工作流](#4-关键工作流)
+    - [4.1 写入工作流](#41-写入工作流)
+    - [4.2 同步工作流 (以“美国同步服务”为例)](#42-同步工作流-以美国同步服务为例)
+        - [4.2.1 阶段一：数据同步 (物理文件层)](#421-阶段一数据同步-物理文件层)
+        - [4.2.2 阶段二：元数据同步与本地化 (逻辑层)](#422-阶段二元数据同步与本地化-逻辑层)
+    - [4.3 读取工作流 (以“美国查询引擎”为例)](#43-读取工作流-以美国查询引擎为例)
+- [5. 运维与成本](#5-运维与成本)
+    - [5.1 故障切换与回切（摘要）](#51-故障切换与回切摘要)
+        - [5.1.1 详细切换 Runbook（含一致性与飞行事务）](#511-详细切换-runbook含一致性与飞行事务)
+    - [5.2 垃圾回收 (GC) 协同](#52-垃圾回收-gc-协同)
+        - [5.2.1 触发与调用（Who / When / How）](#521-触发与调用who--when--how)
+        - [5.2.2 GC 的 base 分支与可达性根（强制口径）](#522-gc-的-base-分支与可达性根强制口径)
+        - [5.2.3 GC 作用域与安全边界（必须读）](#523-gc-作用域与安全边界必须读)
+        - [5.2.4 GC 协同流程（分步）](#524-gc-协同流程分步)
+        - [5.2.5 全局候删清单（来源与格式）](#525-全局候删清单来源与格式)
+            - [5.2.5.1 它是什么](#5251-它是什么)
+            - [5.2.5.2 存放位置](#5252-存放位置)
+            - [5.2.5.3 内容字段（建议 Schema）](#5253-内容字段建议-schema)
+            - [5.2.5.4 执行幂等性与状态机（Regional Executor）](#5254-执行幂等性与状态机regional-executor)
+            - [5.2.5.5 如何消费](#5255-如何消费)
+        - [5.2.6 GC 任务/服务（明确定义）](#526-gc-任务服务明确定义)
+            - [5.2.6.1 组件与归属](#5261-组件与归属)
+            - [5.2.6.2 触发方式（gc-producer）](#5262-触发方式gc-producer)
+            - [5.2.6.3 输入（gc-producer）](#5263-输入gc-producer)
+            - [5.2.6.4 输出（gc-producer）](#5264-输出gc-producer)
+            - [5.2.6.5 算法步骤（gc-producer）](#5265-算法步骤gc-producer)
+            - [5.2.6.6 伪代码（gc-producer）](#5266-伪代码gc-producer)
+            - [5.2.6.7 消费者（gc-executor，各地域）](#5267-消费者gc-executor各地域)
+            - [5.2.6.8 指标与告警（补充）](#5268-指标与告警补充)
+        - [5.2.7 Orphan Files（孤儿文件）](#527-orphan-files孤儿文件)
+    - [5.3 监控与告警指标](#53-监控与告警指标)
+        - [5.3.1 目录层（Catalog / Nessie）](#531-目录层catalog--nessie)
+        - [5.3.2 同步服务层（Sync / DAG）](#532-同步服务层sync--dag)
+            - [5.3.2.1 端到端可读时间线（从写入到区域可读）](#5321-端到端可读时间线从写入到区域可读)
+        - [5.3.3 存储/数据面（Storage / Data Mover）](#533-存储数据面storage--data-mover)
+        - [5.3.4 告警规则（PromQL 示例，按需调整阈值）](#534-告警规则promql-示例按需调整阈值)
+        - [5.3.5 指标与 SLO 对照表](#535-指标与-slo-对照表)
+    - [5.4 成本优化](#54-成本优化)
+        - [5.4.1 清单服务（Storage Inventory）详解](#541-清单服务storage-inventory详解)
+            - [5.4.1.1 它是什么 & 为什么要用](#5411-它是什么--为什么要用)
+            - [5.4.1.2 配置要点（建议）](#5412-配置要点建议)
+            - [5.4.1.3 日期分区与路径规范（标准化层）](#5413-日期分区与路径规范标准化层)
+            - [5.4.1.4 AWS S3 Inventory（示例）](#5414-aws-s3-inventory示例)
+            - [5.4.1.5 GCS Storage Insights（Inventory 报告，示例）](#5415-gcs-storage-insightsinventory-报告示例)
+            - [5.4.1.6 同步服务如何使用清单](#5416-同步服务如何使用清单)
+            - [5.4.1.7 更高频清单的利弊（Pros & Cons）](#5417-更高频清单的利弊pros--cons)
+- [6. 实施与迁移](#6-实施与迁移)
+    - [6.1 冷启动 (Bootstrapping)](#61-冷启动-bootstrapping)
+    - [6.2 安全与网络](#62-安全与网络)
+        - [6.2.1 RBAC 权限矩阵（最小权限）](#621-rbac-权限矩阵最小权限)
+- [7. 附录：与初始设计的对比分析](#7-附录与初始设计的对比分析)
+    - [7.1 核心思想演进](#71-核心思想演进)
+    - [7.2 详细差异对比](#72-详细差异对比)
+    - [7.3 总结](#73-总结)
+    - [7.4 同步 DAG 伪代码示例](#74-同步-dag-伪代码示例)
+
+</details>
+
 ## 1. 概述与目标
 
 本文档描述了一个旨在解决数据全球化挑战的、地理分布式、高可用的 Apache Iceberg 数据湖部署架构。
@@ -159,7 +234,9 @@
         1. 读取**主目录实例**中 `main` 的可见哈希：`H_main = getRef("main").hash`；
         2. 读取 `main_replica_<region>` 当前 HEAD（在主目录）：`H_prev = getRef("main_replica_<region>").hash`（若不存在则按上文在**主目录**创建）；
         3. 构造“路径本地化”的 `CommitOperation` 列表（指向本地域存储的 URI）；
-        4. 执行 CAS 提交（对**主目录**）：`commit(branch="main_replica_<region>", expectedHash=H_prev, parentHashHint=H_main, ops=[...])`；
+        4. 执行 CAS 提交（对**主目录**）：`commit(branch="main_replica_<region>", expectedHash=H_prev, parentHashHint=H_prev, ops=[...])`；
+        **说明**：`parentHashHint` 为**优化性提示**，应指向“当前分支的上一次提交”（`H_prev`）；正确性由 `expectedHash=H_prev` 保证。
+       即使 `main@H` 在读→提交流程中前进，该提示过时也只会增加一次父链解析，不影响正确性；如冲突按第 5 步重试。
         5. 若返回冲突（HEAD 变化/父链不匹配）则刷新哈希重试（幂等）。
         6. 由数据库异步复制，将该提交传播到各地域的目录副本；区域查询端在复制完成后可见。
     *   **不在目录副本库写入**：采用**单写者**模型，区域分支的**创建与推进**均在主目录完成；各地域仅通过数据库复制获得可见性，无需任何“上行发布”。
@@ -223,7 +300,9 @@ def promote_to_regional_branch(nessie, region, main_target_hash, ops):
     # 3) CAS 提交（expectedHash 防止并发覆盖；parentHashHint 对齐父锚点）
     for _ in range(5):
         try:
-            nessie.commit(branch=br, expected_hash=H_prev, parent_hash_hint=H_main, operations=ops)
+            # 说明：parent_hash_hint 应指向“当前分支的上一次提交”（即 H_prev），用于优化后端父链解析；
+# 不应传入 H_main（主分支 HEAD），以免造成歧义。
+            nessie.commit(branch=br, expected_hash=H_prev, parent_hash_hint=H_prev, operations=ops)
             return True
         except ConflictError:
             H_prev = nessie.get_ref(br).hash
@@ -231,8 +310,10 @@ def promote_to_regional_branch(nessie, region, main_target_hash, ops):
     raise RuntimeError("CAS failed after retries")
 ```
 
+> **CAS 语义澄清**：`parent_hash_hint` 是可选的父链定位提示（optimization hint），**不参与并发控制**。
+> 正确性完全由 `expected_hash` 与分支 HEAD 比较决定；提示失效仅可能增加一次父链解析，不会破坏 CAS 结果。
+
 **可观测性与标注字段（Replica Commit Properties）**
-```
 为精确衡量副本分支推进滞后，区域分支的每一次 CAS 提交应在 commit properties 中写入以下标注字段（键名可据实现调整，但需保持一致）：
 - `origin_main_hash`: 对应的主分支提交哈希（作为“同一业务提交”的关联键）。
 - `origin_main_created_ts`: 主分支提交的创建时间（UTC ISO8601）。
@@ -241,7 +322,6 @@ def promote_to_regional_branch(nessie, region, main_target_hash, ops):
 - `replica_commit_created_ts`: 区域分支提交创建时间（Nessie 生成，亦可由服务显式写入 UTC）。
 
 > 这些字段用于计算多种滞后指标（见 5.3 监控与告警指标），同时便于排查：是复制慢、还是本地化/提交慢。
-```
 
 ### 3.2 同步服务
 
@@ -331,22 +411,40 @@ overrides:
 **解析伪代码**:
 ```python
 def resolve_dest(uri: str, current_region: str, registry: Registry) -> str:
+    from urllib.parse import urlparse
+    parsed = urlparse(uri)
+    assert parsed.scheme in ("s3", "gs"), f"unsupported scheme: {parsed.scheme}"
+
     local_prefix = registry.regions[current_region].local_prefix
+
+    def norm(p): 
+        return p if p.endswith("/") else p + "/"
+
+    local_prefix = norm(local_prefix)
+
+    # 1) 已本地：直接返回
     if uri.startswith(local_prefix):
-        return uri  # 已本地，无需复制
+        return uri
 
-    # 1) overrides 优先，最长前缀匹配
-    ov = longest_prefix_match(uri, [o.match_from for o in registry.overrides])
+    # 2) overrides：最长前缀 + **路径段对齐**（避免 data/ 与 data-archive/ 混淆）
+    def segment_match(u, pfx):
+        if not u.startswith(pfx): 
+            return False
+        return u == pfx or u[len(pfx)] == "/"
+
+    ov = max((o for o in registry.overrides if segment_match(uri, norm(o.match_from))), 
+             key=lambda o: len(norm(o.match_from)), default=None)
     if ov:
-        dest_root = registry.regions[ov.to_region].local_prefix
-        return dest_root + uri[len(ov.match_from):]
+        dest_root = norm(registry.regions[ov.to_region].local_prefix)
+        return dest_root + uri[len(norm(ov.match_from)):]  # 边界已对齐
 
-    # 2) 常规 sources 匹配 → 目的地为 current_region.local_prefix
-    src = longest_prefix_match(uri, registry.sources)
+    # 3) sources：同样要求路径段对齐
+    src = max((s for s in registry.sources if segment_match(uri, norm(s))), 
+              key=lambda s: len(norm(s)), default=None)
     if not src:
         raise ValueError(f"No mapping for {uri}")
-    dest = local_prefix + uri[len(src):]
 
+    dest = local_prefix + uri[len(norm(src)):]
     if registry.dest_policy.ensure_local_prefix and not dest.startswith(local_prefix):
         raise ValueError(f"Dest {dest} not under local_prefix {local_prefix}")
     return dest
@@ -357,6 +455,22 @@ def resolve_dest(uri: str, current_region: str, registry: Registry) -> str:
 - **避免配置漂移**：不再为每个地域复制/改写一份 `to` 前缀。
 - **减少重复**：同一来源只在 `sources` 中列一次，目的地由“当前地域”推导。
 - **更易审计**：所有地域共读一份真相源；例外集中体现在 `overrides`，一目了然。
+
+#### 3.4.2 Registry 变更与一致性（Versioning & Atomic Rollout）
+**读写模型**：运行态仅支持只读加载（read‑only）；唯一写入者（Single Writer）是平台 GitOps 流水线。
+**原子发布**：
+ - 采用 versioned object 策略：每次发布写入新 Key（如 `registry/v2/registry-<generation>.json`），并原子替换指针文件 `registry/current.json`。
+ - 指针文件包含 generation、checksum、valid_from（UTC）。
+**客户端热更新**（Sync Service）：
+ 1) 定期拉取 current.json；若 generation 增大则加载新版本；
+ 2) 校验 checksum 后才切换；
+ 3) 新任务用新版本，旧任务用旧版直至完成（graceful reload）。
+**并发与回滚**：
+ - 并发发布通过 Git PR 串行化；
+ - 回滚 = 将指针文件指回旧 generation。
+**一致性与观测**：
+ - 所有时间戳使用 UTC，依赖 NTP；
+ - 导出指标：registry_generation、registry_reload_success_total、registry_reload_failure_total。
 
 ---
 
@@ -413,6 +527,22 @@ def resolve_dest(uri: str, current_region: str, registry: Registry) -> str:
 - **风险控制**：全程单点网关负责可能的“上行发布”；严禁多地域直接向主实例写，防止脑裂。
 - **一致性承诺在切换期的变化**：切主期间，强一致只在“新主”成立后恢复；切换窗口内远端读取可能出现短暂非单调现象（需要运维公告与读路由限制）。
 
+#### 5.1.1 详细切换 Runbook（含一致性与飞行事务）
+1) **冻结写入**：网关/写端点进入只读或直接 503；记录冻结开始时间 `t_freeze`。  
+2) **一致性审计**：  
+   - 确认副本库复制位点已追至或超过目标 `main@H_target`（检查 `pg_stat_replication`/CDC 水位）；  
+   - 对关键表抽样比对 `commit log` 与 `table pointer` 是否一致；必要时暂停异步任务直至追平。  
+3) **切换主库**：  
+   - 将某副本库**提升为主**（DB 层完成只读→可写切换）；  
+   - **更新 Nessie 指向**：将写端点 `nessie-write.company.com` 的 JDBC/DSN 切到新主库（K8s ConfigMap/Secret 滚动、或 Consul/Etcd 服务发现切换，或 DNS 切换 TTL≤30s）；  
+   - 校验 Nessie 健康与 `commit` 正常。  
+4) **飞行中事务处理**：  
+   - 切换前已受理但未完成的 `commit`：以审计日志为准进行**幂等重放**或**标记失败**；  
+   - 确保 WAL/CDC 已在新主**完全重放**，避免“半提交”状态；  
+   - 对外发布变更公告，要求 Writer 重试失败的提交。  
+5) **解冻写入**：灰度放量，观察 `commit_latency_ms`、冲突率与复制拓扑（原主→新从）稳定后全量放开。  
+6) **回切准备**：原主修复并回灌 CDC 之后，按同样步骤回切（保持“单主”原则）。
+
 
 ### 5.2 垃圾回收 (GC) 协同
 
@@ -420,7 +550,7 @@ def resolve_dest(uri: str, current_region: str, registry: Registry) -> str:
 
 **Who（由谁触发）**
 - **Catalog GC = 在主目录（Primary Catalog）上执行 Iceberg 的 `expire_snapshots`**。执行者是**主目录地域的“目录维护”作业**（Airflow DAG 或等价调度），使用 Iceberg API/CLI 连到 **Primary Catalog** 的表。
-- **GC Orchestrator（gc‑producer）**与 `expire_snapshots` **在同一维护作业内**，作为紧随其后的 Task 执行（成功 => 产出候删清单；无变更 => 跳过）``。
+- **GC Orchestrator（gc‑producer）**与 `expire_snapshots` **在同一维护作业内**，作为紧随其后的 Task 执行（成功 => 产出候删清单；无变更 => 跳过）。
 
 **When（何时触发）**
 1) **定时触发（Recommended）**：每日 02:00 UTC（示例）运行 `catalog_maintenance_primary`；对指定 `tables_scope` 滚动执行 `expire_snapshots` → `produce_gc_candidates`。
@@ -435,6 +565,11 @@ def resolve_dest(uri: str, current_region: str, registry: Registry) -> str:
   3) 将 `unreachable` 写入 **`gc_candidates`**（DB 表，随复制分发）与可选 `_gc/pending/*.jsonl`；
   4) 为每条记录计算 `delete_after = produced_at + grace_period`（如 P7D）。
 - **区域侧** `gc‑executor` 周期读取 `gc_candidates`（副本库），当 `now() ≥ delete_after` 执行**本地副本**物理删除，并在 `gc_executions` 记录结果。
+
+**时钟与区域滞后保护（Clock & Regional Lag Guards）**
+- 统一时间源：produced_at/delete_after 使用主库 DB 时间（UTC），执行端允许 clock_skew_guard（±120s）。
+- 区域滞后兜底：若某地域 replica_visibility_lag_seconds / regional_commit_lag_seconds 超过阈值（如跨洲 >1800s），区域执行器自动延长本地删除（regional_extra_grace，如 +P1D），并告警。
+- 网络分区恢复补偿：复制恢复后，执行器先做一次 refresh candidates + verify HEAD，对迟到可见的对象推迟删除，避免误删。
 
 **幂等与安全**
 - `gc_candidates` 对 `file_uri` 设唯一约束（或 UPSERT），保证重复触发不产生重复项；
@@ -460,7 +595,7 @@ iceberg_gc_regional (*/10 min per region)
 #### 5.2.2 GC 的 base 分支与可达性根（强制口径）
 
 **结论先行**：GC 可达性分析的**唯一基线（base）**是 **主目录的 `main@H_active`**，再**并集**一组明确的**受保护引用（Protected Refs）**；
-**明确排除**所有 `main_replica_<region>`（区域分支）。
+**明确排除**所有 `main_replica_<region>`（区域分支，**除非被显式列入 Protected Refs 白名单**）。
 
 **为何排除区域分支？**
 - `main_replica_<region>` 是对 `main` 语义的**本地化视图**（路径重写 + CAS 前滚），不引入“新的业务引用”。
@@ -469,6 +604,7 @@ iceberg_gc_regional (*/10 min per region)
 
 **受保护引用（Protected Refs）**
 - 形态：`tags` / `branches`，用于时间旅行、审计留存或回滚窗口。
+    - **默认不包含** main_replica_*；如确有长期保留需求，可将某个特定区域分支显式加入白名单（不建议长期开启）。
 - 配置：通过白名单或模式匹配（例如 `gc.protected_ref_patterns = ["release/*", "audit/*", "tag://*important*"]`）。
 - 规则：只要对象仍被 `main` 或任一受保护引用可达，则**不进入候删清单**。
 
@@ -536,16 +672,16 @@ unreachable = all_files − reachable
 
 #### 5.2.5 全局候删清单（来源与格式）
 
-**它是什么**
+##### 5.2.5.1 它是什么
 - **不是 Iceberg 自带的功能**：Iceberg 的 `expire_snapshots` 仅在当前表的元数据中移除引用，不会直接生成全局对象清单。
 - **不是 Nessie 的功能**：Nessie 管理提交与引用，但不负责对象存储的物理文件删除。
 - **是我们架构中定义的扩展产物**：当主目录执行 GC（如 `expire_snapshots`）时，由我们自定义的 **GC 任务/服务**生成一份结构化清单，作为全局删除计划。
 
-**存放位置**
+##### 5.2.5.2 存放位置
 - **数据库表**：推荐在主目录数据库内建一张 `gc_candidates` 表（或等价 CDC 流），这样能随 DB 异步复制自动分发到各地域的副本库。
 - **对象存储目录**：可选方案，在对象存储 `_gc/pending/` 目录落地 JSONL/Parquet 文件，方便同步服务与审计工具消费。
 
-**内容字段**（建议 Schema）
+##### 5.2.5.3 内容字段（建议 Schema）
 - `origin_main_hash`: 触发清理的主分支 commit 哈希
 - `table`: 表名（可选）
 - `file_type`: data/delete/manifest/metadata
@@ -561,6 +697,9 @@ unreachable = all_files − reachable
 - 说明：
   - `file_type` 覆盖 data/delete/manifest/metadata 四类；
   - 清单**不包含**“孤儿文件（orphan files）”——它们通过独立流程处置。
+
+- 可选：regional_status（JSONB）：按地域记录状态机（planned/deleting/deleted/missing/error，及 last_update_ts）。
+- 可选：idempotency_key：用于跨重试去重（可取 <origin_main_hash>:<file_uri> 或候删记录自增 ID）。
 
 **示例（JSON 行式）**
 ```json
@@ -580,33 +719,41 @@ unreachable = all_files − reachable
 }
 ```
 
-**如何消费**
+##### 5.2.5.4 执行幂等性与状态机（Regional Executor）
+- 幂等删除：S3/GCS DELETE 对已不存在对象是幂等的；推荐条件删除（If-Match/Generation-Match）或先 HEAD 校验。
+- gc_executions 以 (candidate_id, region) 唯一约束保证幂等，重复重试只更新状态。
+- 状态机：planned → deleting → {deleted | missing | error}；missing 表示该地域未见副本，等待后续重试。
+- 副本缺失：若某地域 replica_uri 未生成或 HEAD=404，置为 missing，不影响其他地域执行；可配置超期回收策略。
+```
+
+##### 5.2.5.5 如何消费
 - 各地域同步服务定期从副本库或 `_gc/pending/` 读取候删清单。
 - 筛选 `delete_after <= now()` 的记录：
   1) 解析出当前地域对应的 `replica_uri`（若缺失则按 Storage Registry 计算一次）；
-  2) 可选：对 `replica_uri` 做清单/HEAD 抽检；若存在 `holds[region] > now()` 则**跳过**；否则对 **`replica_uri`** 执行物理删除（带重试/节流/幂等/审计）；
+  2) 可选：对 replica_uri 做清单/HEAD 抽检；对条件删除启用 If-Match/Generation-Match；若存在 holds[region] > now() 则跳过；否则删除。
   3) 将执行结果写入 `gc_executions` 表或 `_gc/logs/`，确保幂等与可审计。
   4) **禁止从本地域直接删除主目录位置**（`file_uri`/`origin_uri`）；主目录侧的删除由主目录地域的执行器负责（如需）。
+  5) 根据结果更新 regional_status 并 UPSERT 到 gc_executions（以 candidate_id+region 唯一约束确保幂等）。
 
 > **说明**：这样清单是“全局唯一真相源”，避免各地自己判断可达性造成口径不一致，也方便审计与合规。
 
 #### 5.2.6 GC 任务/服务（明确定义）
 
-**组件与归属**
+##### 5.2.6.1 组件与归属
 - **GC Orchestrator（gc‑producer，主目录地域，单写者）**：负责在 `expire_snapshots` 成功后，执行可达性分析并**写入候删清单**（DB 表 `gc_candidates`，以及可选的 `_gc/pending/*.jsonl`）。归属：平台/目录团队。
 - **Regional GC Executor（gc‑executor，各地域）**：按计划消费 `gc_candidates`，在**本地域存储副本**执行物理删除并写回执行记录 `gc_executions`。归属：数据平台/同步团队。
 
-**触发方式（gc‑producer）**
+##### 5.2.6.2 触发方式（gc‑producer）
 - **事件触发**：作为主目录地域 Airflow DAG `iceberg_gc_primary` 的一个 task，紧随 `expire_snapshots` 之后执行。
 - **或 Cron**：Kubernetes CronJob，例如 `0 2 * * *`（每日 02:00 UTC）。
 
-**输入（gc‑producer）**
+##### 5.2.6.3 输入（gc‑producer）
 - `tables_scope`：表范围（支持白名单/通配符）。
 - `base_commit`：用于锚定可达性的 `main@H_active`（可从 Nessie 读取最新可见 `main`）。
 - `grace_period`：安全延迟窗口（如 `P7D`）。
 - `storage_registry`：用于推导各地域 `replica_uri` 的全局注册表（见 3.4.1）。
 
-**输出（gc‑producer）**
+##### 5.2.6.4 输出（gc‑producer）
 - **DB**：表 `gc_candidates`（主库，随复制分发到副本库）。
 - **对象存储（可选）**：`s3://<ops-bucket>/_gc/pending/dt=YYYY-MM-DD/part-*.jsonl`（用于审计/离线消费）。
 
@@ -628,7 +775,7 @@ CREATE TABLE IF NOT EXISTS gc_candidates (
 );
 ```
 
-**算法步骤（gc‑producer）**
+##### 5.2.6.5 算法步骤（gc‑producer）
 1) 读取 `base_commit = getRef('main').hash`；
 2) 对 `tables_scope` 中每张表执行可达性分析：`reachable = collect_reachable_files(base_commit)`；
 3) 从表级对象索引取 `all_files`；计算 `unreachable = all_files - reachable`；
@@ -636,7 +783,7 @@ CREATE TABLE IF NOT EXISTS gc_candidates (
    - 依据 `storage_registry` 反推各地域 `replica_uri`；
    - 写入 `gc_candidates(file_uri, origin_main_hash, file_type, size_bytes, last_referenced_snapshot, delete_after, regions, checksum)`。
 
-**伪代码（gc‑producer）**
+##### 5.2.6.6 伪代码（gc‑producer）
 ```python
 def produce_gc_candidates(tables_scope, grace_period):
     H = nessie.get_ref('main').hash
@@ -648,7 +795,7 @@ def produce_gc_candidates(tables_scope, grace_period):
             upsert_gc_candidate(rec)
 ```
 
-**消费者（gc‑executor，各地域）**
+##### 5.2.6.7 消费者（gc‑executor，各地域）
 - 触发：Airflow DAG `iceberg_gc_regional` 或 Cron；周期例如 `*/10 * * * *`。
 - 逻辑：
   1) 拉取 `delete_after <= now()` 且 `region = <current>` 的候删记录；
@@ -671,7 +818,7 @@ CREATE TABLE IF NOT EXISTS gc_executions (
 CREATE INDEX ON gc_executions (region, deleted_at);
 ```
 
-**指标与告警（补充）**
+##### 5.2.6.8 指标与告警（补充）
 - 指标：`gc_candidates_total{region}`、`gc_deleted_total{region}`、`gc_executor_errors_total{region}`、`gc_executor_latency_ms`。
 - 告警：`rate(gc_executor_errors_total[15m]) > 0`；`histogram_quantile(0.95, gc_executor_latency_ms_bucket) > 30000` 等。
 
@@ -798,6 +945,8 @@ def detect_orphans(inventory_tbl, reachable_tbl, region, grace_orphan_days=14):
   - **采集**：对照 `getRef("main")` 在副本库可见的目标 `hash` 与主目录中该 `hash` 的 `created_ts`（从审计/commit properties 读取）。  
   - **归属**：DBA/SRE（目录后端）  
   👉 **解读**：这是业务级别的可见性延迟，衡量某个具体的 main@hash 提交何时在副本库可见，直接对应查询端能否读到。
+
+👉 SLO 衔接：GC 的 delete_after 应 ≥ P95 replica_visibility_lag_seconds + 安全裕度（如 +P1D）；跨洲部署应更保守。
 - **`regional_commit_lag_seconds{region}`**  
   - **定义**：`replica_commit_created_ts - origin_main_created_ts`；反映“主提交发生 → 对应区域分支提交创建”的端到端滞后（**包含复制+本地化+CAS**）。  
   - **单位**：秒（s）  
@@ -888,6 +1037,8 @@ def detect_orphans(inventory_tbl, reachable_tbl, region, grace_orphan_days=14):
 - `writer_to_regional_read_ready_lag_seconds = t3 − tW`
 - 由于推进区域分支前已满足 `data_copy_end_ts ≤ t2` 且 `localize_end_ts ≤ t2`，因此 `t3` 成为区域可读性的主导因素；若 `t3 − t2` 过大，排查 **catalog_db_replication_lag_seconds** 与副本重放性能。
 
+**关系说明**：通常 `tW ≤ t0`；若 Writer 提交存在队列/网络抖动，则 `t0 − tW` 反映 **writer-side flush/commit 延迟**，不应与复制/本地化延迟混淆。
+
 #### 5.3.3 存储/数据面（Storage / Data Mover）
 - **`cross_region_data_transfer_bytes{region}`**  
   - **定义**：跨区域传输的累计字节数（可派生为 `*_gb`）。  
@@ -944,10 +1095,10 @@ def detect_orphans(inventory_tbl, reachable_tbl, region, grace_orphan_days=14):
 
 | 指标名 | 定义 | SLO 目标 (示例) | 说明 |
 | :--- | :--- | :--- | :--- |
-| `catalog_db_replication_lag_seconds` | 主目录 → 副本目录 DB 复制延迟 | P95 ≤ 60s | 保障副本可见性延迟受控；RPO ≤ 1min |
+| `catalog_db_replication_lag_seconds` | 主目录 → 副本目录 DB 复制延迟 | 同洲 P95 ≤ 60s；跨洲 P95 ≤ 180s | 保障副本可见性延迟受控；RPO ≤ 1min |
 | `commit_latency_ms` | 主目录 commit 服务端延迟 | P95 ≤ 200ms | 写路径强一致性下的用户体验 |
 | `replica_visibility_lag_seconds{region}` | `main@hash` 在副本库可见延迟 | P95 ≤ 60s | 保证副本读延迟上限；查询可用性关键 |
-| `regional_commit_lag_seconds{region}` | 主 commit → 区域分支 commit 滞后 | P95 ≤ 900s (15m) | 包含复制+本地化+CAS，端到端核心 SLO |
+| `regional_commit_lag_seconds{region}` | 主 commit → 区域分支 commit 滞后 | 同洲 P95 ≤ 900s；跨洲/大表 P95 ≤ 1800s (30m) | 包含复制+本地化+CAS，端到端核心 SLO |
 | `sync_job_end_to_end_lag_seconds{region,table}` | 主 commit → 本地域完全可用 | P95 ≤ 1200s (20m) | 表级观测；滞后过大需 Fast-Forward |
 | `copy_backlog_bytes{region}` | 待复制字节数 | < 5TB（滚动 10m 窗口） | 过高提示带宽瓶颈或任务阻塞 |
 | `rclone_throughput_bytes_per_sec{region}` | 跨区复制吞吐 | ≥ 目标带宽的 70% | 吞吐不足需检查网络/限速配置 |
@@ -965,7 +1116,7 @@ def detect_orphans(inventory_tbl, reachable_tbl, region, grace_orphan_days=14):
 
 #### 5.4.1 清单服务（Storage Inventory）详解
 
-**它是什么 & 为什么要用**
+##### 5.4.1.1 它是什么 & 为什么要用
 - **存储清单**是对象存储周期性导出的**对象列表快照**（含 Key/Size/ETag/Checksum/StorageClass/VersionId 等元数据）。
 - 作用：
   1) **替代高成本的 online LIST**（尤其是跨区/跨云）→ 同步服务用“离线清单”做差分；
@@ -973,7 +1124,7 @@ def detect_orphans(inventory_tbl, reachable_tbl, region, grace_orphan_days=14):
   3) **成本/配额分析** → 结合大小/存储类型统计；
   4) **GC 协同** → 候删对象与清单对账，降低误删风险。
 
-**配置要点（建议）**
+##### 5.4.1.2 配置要点（建议）
 - **范围**：覆盖所有参与复制的桶/前缀（源与本地）。
 - **频率**：按云厂商支持的频率配置（常见为**每日**；部分产品支持**每周**或更高频率）。
 - **格式**：优先 **Parquet**（便于 Athena/BigQuery 查询；压缩友好）。
@@ -984,7 +1135,7 @@ def detect_orphans(inventory_tbl, reachable_tbl, region, grace_orphan_days=14):
 - **保留期**：30–90 天；启用生命周期策略自动过期。
 - **权限**：仅授予同步服务读权限；落地桶开启默认加密（KMS）。
 
-**日期分区与路径规范（标准化层）**
+##### 5.4.1.3 日期分区与路径规范（标准化层）
 - **原始落地（raw）**：云厂商生成的清单文件在目标桶/前缀下交付，命名规则由厂商决定（通常附带交付日期/清单批次的目录或 manifest 文件）。
 - **标准化落地（curated）**：建议在内部做一道轻量 ETL，将“原始清单”规范化为 **Hive 风格分区** 结构，便于按天/小时查询：
   - `s3://<inventory-curated>/inventory/<source-bucket>/dt=YYYY-MM-DD/part-*.parquet`
@@ -1007,7 +1158,7 @@ for batch in list_raw_inventory_batches():
 > - **GCS Storage Insights（Inventory 报告）**：Google Cloud Storage 的同类能力，其产品名为 *Storage Insights*，其中包含“Inventory 报告”（对象清单）。
 > 二者本质等价：都会按计划把某个桶/前缀下的对象元数据（Key/Size/ETag/Checksum/StorageClass 等）导出到你指定的目标位置。
 
-**AWS S3 Inventory（示例）**
+##### 5.4.1.4 AWS S3 Inventory（示例）
 ```json
 {
   "Id": "inv-us-prod",
@@ -1028,7 +1179,7 @@ for batch in list_raw_inventory_batches():
 ```
 > 可用 `aws s3api put-bucket-inventory-configuration` 设置；多前缀可用多策略或在消费侧过滤。
 
-**GCS Storage Insights（Inventory 报告，示例）**
+##### 5.4.1.5 GCS Storage Insights（Inventory 报告，示例）
 ```yaml
 name: insights-us-prod
 bucket: prod-us-bucket
@@ -1040,7 +1191,7 @@ fields: [NAME, SIZE, MD5_HASH, CRC32C, STORAGE_CLASS, UPDATED, GENERATION]
 ```
 > 可用控制台或 `gcloud storage insights reports create` 创建。
 
-**同步服务如何使用清单**
+##### 5.4.1.6 同步服务如何使用清单
 1) **构建差分**：
    - 取 `main@H_prev..H_main` 的 ADDED 文件列表（来自 Iceberg/Nessie）。
    - 在**源清单**中按 `Key`（或完整 URI → `bucket`+`key`）查存在性与 `ETag/CRC32C/Size`。
@@ -1071,7 +1222,7 @@ WHERE d.size <> b.size;
 ```
 
 
-**更高频清单的利弊（Pros & Cons）**
+##### 5.4.1.7 更高频清单的利弊（Pros & Cons）
 
 *优点（何时值得提频）*
 - **降低在线 HEAD/LIST 比例与成本**：更多对象状态可由清单命中，尤其在跨区/跨云 QPS 受限或费用敏感时收益明显。
@@ -1106,6 +1257,10 @@ WHERE d.size <> b.size;
 
 > **补充说明**：当一个已有副本的地区首次开始**写入数据**时，其第一批数据文件会先写入本地存储，然后对应的提交必须通过广域网发送到主目录的 `main` 分支。由于跨地域网络延迟，这部分写入延迟会相对较高，是整体延迟模型需要考虑的一环。
 
+> **一致性要求（Cutover）**：全量元数据同步需与增量同步对齐一个**切换点**：要么在 cutover@H 暂停新写入、完成全量快照再恢复增量；要么记录
+H_cutover 并确保增量只消费 H_cutover 及之后的提交。否则会出现“全量与增量交叉覆盖/遗漏”的一致性问题。
+
+
 ### 6.2 安全与网络
 
 *   **网络**: 不同云或本地机房与云之间的通信，必须通过安全的 **VPN** 或 **专线（Direct Connect / Interconnect）**。VPC/VNet 的网络ACL和安全组必须经过严格配置，只允许必要的服务端口通信。
@@ -1113,6 +1268,14 @@ WHERE d.size <> b.size;
     *   每个同步服务都应使用一个拥有**最小权限**的 IAM 角色或服务账户。
     *   例如，美东的同步服务，其角色应只拥有“读欧洲S3”和“写美东S3”的权限，以及访问Nessie和本地目录数据库的权限。
     *   凭证应通过安全的密钥管理服务（如 AWS Secrets Manager）进行管理和轮换。
+
+#### 6.2.1 RBAC 权限矩阵（最小权限）
+| 角色 | 目录（Nessie/API） | 目录 DB | 对象存储（源） | 对象存储（本地） | 备注 |
+|---|---|---|---|---|---|
+| Writer 作业 | `commit` 到 `main`；只读 `getRef` | 无（经 Nessie） | 只读 | 只写本地域前缀 | 不允许触达副本库或他地域写 |
+| Sync Service | 写 `main_replica_<region>`（在**主目录**上）；读 `main`/`commit log` | 只读副本库；不在副本库执行写 | 读（跨区/跨云） | 写（本地域落地前缀）+ 删除（GC 执行） | 需要 `assume role`/KMS 权限 |
+| Regional Reader | 只读 `getRef`/`getCommitLog`（本地域读取端点） | 只读副本库 | 只读（本地域） | 只读（本地域） | 禁止访问写端点 |
+| GC Orchestrator | 读写 `gc_candidates`（主库） | 主库可写 | 只读 | （可选）删除主目录位置 | 通常位于主目录地域 |
 
 ---
 
@@ -1196,6 +1359,8 @@ with DAG("iceberg_sync_us", schedule_interval="*/5 * * * *") as dag:
         task_id="emit_metrics",
         python_callable=emit_metrics
     )
+
+    # 注：若是该地域的**首次写入**，提交会通过广域网转发到主目录 main，延迟相对更高（见 6.1 冷启动补充说明）
 
     # 定义依赖
     t1_list_added_files >> t2_plan_copy >> t3_copy_batches >> t4_verify >> t5_localize >> t6_commit >> t7_metrics
