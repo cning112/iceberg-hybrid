@@ -16,13 +16,13 @@
 - [2. 架构总览](#2-架构总览)
 - [3. 核心组件详述](#3-核心组件详述)
     - [3.1 全局事务性目录](#31-全局事务性目录)
-    - [3.5 Nessie 部署拓扑（实例数量与角色）](#35-nessie-部署拓扑实例数量与角色)
-    - [3.6 提交门槛（Replica Commit Gate）](#36-提交门槛replica-commit-gate)
-    - [3.2 同步服务](#32-同步服务)
-    - [3.3 数据移动器](#33-数据移动器)
-    - [3.4 存储注册表 (Storage Registry)](#34-存储注册表-storage-registry)
-        - [3.4.1 Storage Registry Schema 与契约（全局单一注册表）](#341-storage-registry-schema-与契约全局单一注册表)
-        - [3.4.2 Registry 变更与一致性（Versioning & Atomic Rollout）](#342-registry-变更与一致性versioning--atomic-rollout)
+    - [3.2 Nessie 部署拓扑（实例数量与角色）](#32-nessie-部署拓扑实例数量与角色)
+    - [3.3 提交门槛（Replica Commit Gate）](#33-提交门槛replica-commit-gate)
+    - [3.4 同步服务](#34-同步服务)
+    - [3.5 数据移动器](#35-数据移动器)
+    - [3.6 存储注册表 (Storage Registry)](#36-存储注册表-storage-registry)
+        - [3.6.1 Storage Registry Schema 与契约（全局单一注册表）](#361-storage-registry-schema-与契约全局单一注册表)
+        - [3.6.2 Registry 变更与一致性（Versioning & Atomic Rollout）](#362-registry-变更与一致性versioning--atomic-rollout)
 - [4. 关键工作流](#4-关键工作流)
     - [4.1 写入工作流](#41-写入工作流)
     - [4.2 同步工作流 (以“美国同步服务”为例)](#42-同步工作流-以美国同步服务为例)
@@ -339,7 +339,7 @@ def promote_to_regional_branch(nessie, region, main_target_hash, ops):
 *   **角色**: 由同步服务调用，负责物理文件的跨云、跨区域复制。
 *   **实现**: 推荐使用 **Rclone**。它功能强大，支持所有主流云存储，且其 `copy` 操作是幂等的，非常适合此场景。
 
-### 3.4 存储注册表 (Storage Registry)
+### 3.6 存储注册表 (Storage Registry)
 
 *   **角色**: 一个全局配置，用于将存储路径的前缀映射到访问该存储所需的元数据（如 Rclone 远程配置名、凭证ID等）。这是同步服务能够访问其他地区存储的关键。
 *   **实现**: 一个由所有同步服务共享的 JSON 或 YAML 配置文件。
