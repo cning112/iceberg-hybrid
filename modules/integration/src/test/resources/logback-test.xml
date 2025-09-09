@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <!-- Console appender for test output -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} -- %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- File appender for integration tests -->
+    <appender name="FILE" class="ch.qos.logback.core.FileAppender">
+        <file>build/logs/integration-tests.log</file>
+        <append>false</append>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{50} -- %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- Application-specific loggers -->
+    <logger name="com.streamfirst.iceberg.hybrid" level="DEBUG"/>
+    
+    <!-- Adapter-specific logging for detailed tracing -->
+    <logger name="com.streamfirst.iceberg.hybrid.adapters" level="INFO"/>
+    
+    <!-- Application service logging -->
+    <logger name="com.streamfirst.iceberg.hybrid.application" level="DEBUG"/>
+    
+    <!-- Integration test logging -->
+    <logger name="com.streamfirst.iceberg.hybrid.integration" level="INFO"/>
+
+    <!-- Root logger -->
+    <root level="WARN">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="FILE"/>
+    </root>
+</configuration>
