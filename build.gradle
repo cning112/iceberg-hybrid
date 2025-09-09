@@ -3,7 +3,7 @@ plugins {
 }
 
 allprojects {
-    group = 'com.yourorg.iceberg.hybrid'
+    group = 'com.streamfirst.iceberg.hybrid'
     version = '0.1.0'
 }
 
