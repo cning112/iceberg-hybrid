@@ -1,6 +1,11 @@
 rootProject.name = "iceberg-hybrid"
 
 include(
+  "modules:domain",
+  "modules:ports",
+  "modules:application",
+  "modules:adapters",
+  "modules:integration",
   "legacy:modules:domain",
   "legacy:modules:ports",
   "legacy:modules:app",

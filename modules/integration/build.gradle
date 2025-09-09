@@ -1,0 +1,29 @@
+plugins {
+    id 'java-library'
+}
+
+dependencies {
+    // Project modules
+    testImplementation project(':modules:domain')
+    testImplementation project(':modules:ports')  
+    testImplementation project(':modules:application')
+    testImplementation project(':modules:adapters')
+    
+    // Test framework
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.0'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    
+    // Logging
+    testImplementation 'org.slf4j:slf4j-api:2.0.9'
+    testRuntimeOnly 'ch.qos.logback:logback-classic:1.4.11'
+    
+    // Lombok
+    compileOnly 'org.projectlombok:lombok:1.18.30'
+    annotationProcessor 'org.projectlombok:lombok:1.18.30'
+    testCompileOnly 'org.projectlombok:lombok:1.18.30'
+    testAnnotationProcessor 'org.projectlombok:lombok:1.18.30'
+}
+
+test {
+    useJUnitPlatform()
+}
