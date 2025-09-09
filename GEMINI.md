@@ -6,6 +6,14 @@ This project implements a **geo-distributed, high-availability Apache Iceberg de
 
 This architecture enables true multi-site read/write capabilities, making it suitable for global enterprises that require a single, consistent view of their data lake across disparate cloud and on-premise environments.
 
+**Current Development Status:**
+
+* **Legacy Modules:** The existing modules under the `legacy/` directory are no longer actively maintained or used for
+  new development. They serve as a historical reference.
+* **New Modules:** New modules are being actively developed following the design principles outlined in
+  `iceberg-arch-geo-distributed-ha.md`. These new modules will gradually replace the functionality of the legacy
+  modules.
+
 **Core Principles:**
 *   **Single Source of Truth (for Metadata):** A globally consistent, transactional catalog (Project Nessie) acts as the single source of truth for all table metadata commits.
 *   **Geo-Distributed Writes & Reads:** Write jobs execute in their local environment for performance, and read jobs query a complete, localized data replica for low latency.
