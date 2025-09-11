@@ -3,11 +3,11 @@ plugins {
 }
 
 dependencies {
-    // Project modules
-    testImplementation project(':modules:domain')
-    testImplementation project(':modules:ports')  
-    testImplementation project(':modules:application')
-    testImplementation project(':modules:adapters')
+    // Legacy Java project modules
+    testImplementation project(':legacy-java:domain')
+    testImplementation project(':legacy-java:ports')  
+    testImplementation project(':legacy-java:application')
+    testImplementation project(':legacy-java:adapters')
     
     // Test framework
     testImplementation 'org.junit.jupiter:junit-jupiter:5.10.0'

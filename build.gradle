@@ -1,5 +1,6 @@
 plugins {
     id 'java'
+    id 'scala'
 }
 
 allprojects {
@@ -8,8 +9,6 @@ allprojects {
 }
 
 subprojects {
-    apply plugin: 'java'
-
     java {
         toolchain {
             languageVersion = JavaLanguageVersion.of(21)
@@ -20,12 +19,57 @@ subprojects {
         mavenCentral()
     }
 
+    test {
+        useJUnitPlatform()
+    }
+}
+
+// Configure Scala modules
+configure(subprojects.findAll { it.path.startsWith(':modules:') }) {
+    apply plugin: 'scala'
+
+    scala {
+        zincVersion = "1.9.6"
+    }
+
+    dependencies {
+        implementation 'org.scala-lang:scala3-library_3:3.3.6'
+
+        // ZIO dependencies
+        implementation 'dev.zio:zio_3:2.0.19'
+        implementation 'dev.zio:zio-streams_3:2.0.19'
+        implementation 'dev.zio:zio-logging_3:2.1.14'
+        implementation 'dev.zio:zio-config_3:4.0.0-RC16'
+        implementation 'dev.zio:zio-json_3:0.6.2'
+
+        // Test dependencies
+        testImplementation 'dev.zio:zio-test_3:2.0.19'
+        testImplementation 'dev.zio:zio-test-sbt_3:2.0.19'
+        testImplementation 'dev.zio:zio-test-junit_3:2.0.19'
+    }
+
+    tasks.withType(ScalaCompile) {
+        scalaCompileOptions.additionalParameters = [
+                "-feature",
+                "-deprecation",
+                "-unchecked",
+                "-Wunused:all",
+                "-source:future"
+        ]
+    }
+}
+
+// Configure legacy Java modules
+configure(subprojects.findAll { it.path.startsWith(':legacy-java:') || it.path.startsWith(':legacy:') }) {
+    apply plugin: 'java'
+
     dependencies {
         testImplementation 'org.junit.jupiter:junit-jupiter:5.11.0'
         testImplementation 'org.assertj:assertj-core:3.26.3'
     }
 
-    test {
-        useJUnitPlatform()
+    // Handle duplicate files in JAR creation
+    tasks.withType(Jar) {
+        duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     }
 }

@@ -1,9 +1,9 @@
+// Adapters module - external system implementations
 dependencies {
     implementation project(':modules:domain')
     implementation project(':modules:ports')
+    implementation project(':modules:application')
     
-    implementation 'org.slf4j:slf4j-api:2.0.9'
-    
-    compileOnly 'org.projectlombok:lombok:1.18.30'
-    annotationProcessor 'org.projectlombok:lombok:1.18.30'
+    // External system dependencies will be added as needed
+    // e.g., Apache Iceberg, AWS SDK, Kafka, Redis, etc.
 }

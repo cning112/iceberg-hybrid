@@ -1,10 +1,4 @@
-plugins {
-    id 'java-library'
-}
-
+// Ports module - interface definitions
 dependencies {
-    api project(':modules:domain')
-    
-    compileOnly 'org.projectlombok:lombok:1.18.30'
-    annotationProcessor 'org.projectlombok:lombok:1.18.30'
+    implementation project(':modules:domain')
 }

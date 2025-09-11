@@ -1,20 +1,29 @@
 rootProject.name = "iceberg-hybrid"
 
 include(
-  "modules:domain",
-  "modules:ports",
-  "modules:application",
-  "modules:adapters",
-  "modules:integration",
-  "legacy:modules:domain",
-  "legacy:modules:ports",
-  "legacy:modules:app",
-  "legacy:modules:adapters:catalog-nessie",
-  "legacy:modules:adapters:storage-s3",
-  "legacy:modules:adapters:inventory-s3",
-  "legacy:modules:adapters:infra-redis",
-  "legacy:modules:adapters:infra-kafka",
-  "legacy:modules:boot",
-  "legacy:qa:e2e",
-  "legacy:qa:perf-jmh"
+        // New Scala 3 + ZIO modules
+        "modules:domain",
+        "modules:ports",
+        "modules:application",
+        "modules:adapters",
+
+        // Legacy Java modules for reference
+        "legacy-java:domain",
+        "legacy-java:ports",
+        "legacy-java:application",
+        "legacy-java:adapters",
+        "legacy-java:integration",
+
+        // Legacy java modules for replica-dr design
+        "legacy:modules:domain",
+        "legacy:modules:ports",
+        "legacy:modules:app",
+        "legacy:modules:adapters:catalog-nessie",
+        "legacy:modules:adapters:storage-s3",
+        "legacy:modules:adapters:inventory-s3",
+        "legacy:modules:adapters:infra-redis",
+        "legacy:modules:adapters:infra-kafka",
+        "legacy:modules:boot",
+        "legacy:qa:e2e",
+        "legacy:qa:perf-jmh"
 )

@@ -1,13 +1,5 @@
-plugins {
-    id 'java-library'
-}
-
+// Application module - service orchestration and business workflows
 dependencies {
-    api project(':modules:domain')
-    api project(':modules:ports')
-    
-    implementation 'org.slf4j:slf4j-api:2.0.9'
-    
-    compileOnly 'org.projectlombok:lombok:1.18.30'
-    annotationProcessor 'org.projectlombok:lombok:1.18.30'
+    implementation project(':modules:domain')
+    implementation project(':modules:ports')
 }
