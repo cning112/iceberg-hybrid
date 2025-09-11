@@ -1,27 +1,39 @@
-# Iceberg Hybrid (Ports & Adapters) — Java 21
+# Iceberg Hybrid (Ports & Adapters) — Scala 3 + ZIO
 
-This repository is a production-grade skeleton implementing a Hexagonal (Ports & Adapters) layout for a hybrid on‑prem + cloud Apache Iceberg deployment.
+This repository implements a **geo-distributed, high-availability Apache Iceberg deployment** using hexagonal (ports &
+adapters) architecture with Scala 3 and ZIO functional effects.
 
-## Modules
+## Architecture
 
-- `legacy/modules/domain` — Pure domain records/entities.
-- `legacy/modules/ports` — Ports (interfaces) for Catalog, ObjectStore, Inventory, Replication, Leases, Consistency, EventBus, Metrics.
-- `legacy/modules/app` — Application services (ReplicationPlanner, StateReconciler, GCCoordinator, ReadRouter).
-- `legacy/modules/adapters/*` — Thin adapters (stubs) for Nessie/BigLake (catalog), S3/MinIO (storage), S3 Inventory (inventory), Redis (leases/tokens), Kafka (events).
-- `legacy/modules/boot` — Spring Boot wiring (onprem/cloud profiles).
-- `legacy/qa/e2e` — E2E tests (in-memory happy path + optional Testcontainers scaffolding).
-- `legacy/qa/perf-jmh` — JMH microbenchmarks (inventory lookup hot path).
+### Active Modules (Scala 3 + ZIO)
 
-## Quick start
+- `modules/domain` — Pure domain types using Scala 3 case classes and enums
+- `modules/ports` — ZIO-based interface definitions for external systems
+- `modules/application` — Service orchestration using ZIO effects
+- `modules/adapters` — External system implementations with ZIO integration
+
+### Legacy Modules (Java)
+
+- `legacy-java/*` — Original Java implementation (hexagonal architecture)
+- `legacy/modules/*` — Earlier Java modules for replica-dr design
+
+## Quick Start
+
+### Build and Test
 
 ```bash
+# Build all modules
+./gradlew build
+
+# Run tests
 ./gradlew test
+
+# Clean build artifacts
+./gradlew clean
 ```
 
-To run E2E Testcontainers (optional), enable the `containers` tag:
+### Development
 
-```bash
-./gradlew :legacy:qa:e2e:test --tests "*Containers*" -Dgroups=containers
-```
-
-You can also open this project in IntelliJ IDEA and run the tests from there.
+- Open in IntelliJ IDEA with Scala plugin
+- Active development in `modules/` using Scala 3 + ZIO
+- Legacy Java modules in `legacy-java/` for reference
