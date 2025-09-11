@@ -23,7 +23,8 @@
             <totalSizeCap>1GB</totalSizeCap>
         </rollingPolicy>
         <encoder>
-            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{50} [%X{region}:%X{tableId}] -- %msg%n</pattern>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{50} [%X{region}:%X{tableId}] -- %msg%n
+            </pattern>
         </encoder>
     </appender>
 
@@ -38,7 +39,8 @@
             <maxHistory>90</maxHistory>
         </rollingPolicy>
         <encoder>
-            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{50} [%X{region}:%X{tableId}] -- %msg%n%ex</pattern>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{50} [%X{region}:%X{tableId}] -- %msg%n%ex
+            </pattern>
         </encoder>
     </appender>
 
@@ -50,7 +52,9 @@
             <maxHistory>7</maxHistory>
         </rollingPolicy>
         <encoder>
-            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{30} [%X{syncEventId}:%X{region}:%X{tableId}] -- %msg%n</pattern>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{30} [%X{syncEventId}:%X{region}:%X{tableId}]
+                -- %msg%n
+            </pattern>
         </encoder>
     </appender>
 
@@ -67,41 +71,41 @@
     </appender>
 
     <!-- Logger configurations for different components -->
-    
+
     <!-- Core application services -->
     <logger name="com.streamfirst.iceberg.hybrid.application" level="INFO" additivity="false">
         <appender-ref ref="CONSOLE"/>
         <appender-ref ref="APP_FILE"/>
         <appender-ref ref="ERROR_FILE"/>
     </logger>
-    
+
     <!-- Synchronization operations - detailed logging -->
     <logger name="com.streamfirst.iceberg.hybrid.application.SyncOrchestrator" level="DEBUG" additivity="false">
         <appender-ref ref="CONSOLE"/>
         <appender-ref ref="SYNC_FILE"/>
         <appender-ref ref="ERROR_FILE"/>
     </logger>
-    
+
     <!-- Write coordination - critical operations -->
     <logger name="com.streamfirst.iceberg.hybrid.application.WriteCoordinator" level="INFO" additivity="false">
         <appender-ref ref="CONSOLE"/>
         <appender-ref ref="APP_FILE"/>
         <appender-ref ref="ERROR_FILE"/>
     </logger>
-    
+
     <!-- Read routing - info level for performance monitoring -->
     <logger name="com.streamfirst.iceberg.hybrid.application.ReadRouter" level="INFO" additivity="false">
         <appender-ref ref="CONSOLE"/>
         <appender-ref ref="APP_FILE"/>
     </logger>
-    
+
     <!-- Adapters - configurable per environment -->
     <logger name="com.streamfirst.iceberg.hybrid.adapters" level="WARN" additivity="false">
         <appender-ref ref="CONSOLE"/>
         <appender-ref ref="APP_FILE"/>
         <appender-ref ref="ERROR_FILE"/>
     </logger>
-    
+
     <!-- Domain events and operations -->
     <logger name="com.streamfirst.iceberg.hybrid.domain" level="WARN" additivity="false">
         <appender-ref ref="CONSOLE"/>

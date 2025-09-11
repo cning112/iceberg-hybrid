@@ -18,13 +18,13 @@
 
     <!-- Application-specific loggers -->
     <logger name="com.streamfirst.iceberg.hybrid" level="DEBUG"/>
-    
+
     <!-- Adapter-specific logging for detailed tracing -->
     <logger name="com.streamfirst.iceberg.hybrid.adapters" level="INFO"/>
-    
+
     <!-- Application service logging -->
     <logger name="com.streamfirst.iceberg.hybrid.application" level="DEBUG"/>
-    
+
     <!-- Integration test logging -->
     <logger name="com.streamfirst.iceberg.hybrid.integration" level="INFO"/>
 

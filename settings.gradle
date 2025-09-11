@@ -8,11 +8,11 @@ include(
         "modules:adapters",
 
         // Legacy Java modules for reference
-        "legacy-java:domain",
-        "legacy-java:ports",
-        "legacy-java:application",
-        "legacy-java:adapters",
-        "legacy-java:integration",
+        "legacy-java:domain-java",
+        "legacy-java:ports-java",
+        "legacy-java:application-java",
+        "legacy-java:adapters-java",
+        "legacy-java:integration-java",
 
         // Legacy java modules for replica-dr design
         "legacy:modules:domain",

@@ -1,10 +1,10 @@
 dependencies {
-    implementation project(':legacy-java:domain')
-    implementation project(':legacy-java:ports')
-    implementation project(':legacy-java:application')
-    
+    implementation project(':legacy-java:domain-java')
+    implementation project(':legacy-java:ports-java')
+    implementation project(':legacy-java:application-java')
+
     implementation 'org.slf4j:slf4j-api:2.0.9'
-    
+
     compileOnly 'org.projectlombok:lombok:1.18.30'
     annotationProcessor 'org.projectlombok:lombok:1.18.30'
 }

@@ -3,8 +3,11 @@ plugins {
 }
 
 dependencies {
-    api project(':legacy-java:domain')
-    
+    api project(':legacy-java:domain-java')
+    api project(':legacy-java:ports-java')
+
+    implementation 'org.slf4j:slf4j-api:2.0.9'
+
     compileOnly 'org.projectlombok:lombok:1.18.30'
     annotationProcessor 'org.projectlombok:lombok:1.18.30'
 }
