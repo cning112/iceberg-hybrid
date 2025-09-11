@@ -2,10 +2,9 @@ package com.streamfirst.iceberg.hybrid.domain
 
 import java.time.Instant
 
-/**
- * Represents a request to commit changes to a table. This is processed by the commit gate
- * to ensure consistency across regions before allowing the commit to proceed.
- */
+/** Represents a request to commit changes to a table. This is processed by the commit gate to
+  * ensure consistency across regions before allowing the commit to proceed.
+  */
 final case class CommitRequest(
   tableId: TableId,
   requestId: String,

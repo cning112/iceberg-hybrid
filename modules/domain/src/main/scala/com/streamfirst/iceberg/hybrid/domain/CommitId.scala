@@ -2,10 +2,9 @@ package com.streamfirst.iceberg.hybrid.domain
 
 import java.util.UUID
 
-/**
- * Strong type for commit identifiers in Apache Iceberg. Represents a specific version
- * of table metadata and schema changes.
- */
+/** Strong type for commit identifiers in Apache Iceberg. Represents a specific version of table
+  * metadata and schema changes.
+  */
 opaque type CommitId = String
 
 object CommitId:

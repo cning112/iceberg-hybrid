@@ -2,10 +2,9 @@ package com.streamfirst.iceberg.hybrid.domain
 
 import java.util.UUID
 
-/**
- * Strong type for event identifiers. Provides type safety and prevents mixing up event IDs with
- * other string values.
- */
+/** Strong type for event identifiers. Provides type safety and prevents mixing up event IDs with
+  * other string values.
+  */
 opaque type EventId = String
 
 object EventId:

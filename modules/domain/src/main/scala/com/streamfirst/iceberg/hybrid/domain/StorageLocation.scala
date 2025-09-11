@@ -1,9 +1,8 @@
 package com.streamfirst.iceberg.hybrid.domain
 
-/**
- * Represents a storage location in a specific region. Contains all information needed
- * to access the storage system in that region.
- */
+/** Represents a storage location in a specific region. Contains all information needed to access
+  * the storage system in that region.
+  */
 final case class StorageLocation(
   region: Region,
   endpoint: String,
@@ -13,7 +12,7 @@ final case class StorageLocation(
   def basePath: StoragePath =
     val prefix = pathPrefix.map(_ + "/").getOrElse("")
     StoragePath(s"s3://$bucketName/$prefix")
-    
+
   def pathFor(relativePath: String): StoragePath =
     basePath / relativePath
 

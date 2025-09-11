@@ -2,11 +2,10 @@ package com.streamfirst.iceberg.hybrid.domain
 
 import java.time.Instant
 
-/**
- * Represents a synchronization event for replicating data or metadata between regions. Events track
- * the progress of cross-region replication and provide audit trails for debugging distributed
- * synchronization issues.
- */
+/** Represents a synchronization event for replicating data or metadata between regions. Events
+  * track the progress of cross-region replication and provide audit trails for debugging
+  * distributed synchronization issues.
+  */
 final case class SyncEvent(
   eventId: EventId,
   eventType: SyncEvent.Type,
@@ -18,38 +17,40 @@ final case class SyncEvent(
   createdAt: Instant,
   updatedAt: Instant
 ):
-  /**
-   * Creates a copy of this event with updated status and timestamp. Convenience method for status
-   * transitions.
-   */
+  /** Creates a copy of this event with updated status and timestamp. Convenience method for status
+    * transitions.
+    */
   def withStatus(newStatus: SyncEvent.Status, timestamp: Instant): SyncEvent =
     copy(status = newStatus, updatedAt = timestamp)
-    
+
   def withStatus(newStatus: SyncEvent.Status): SyncEvent =
     withStatus(newStatus, Instant.now())
 
 object SyncEvent:
-  /**
-   * Types of synchronization events in the geo-distributed system.
-   */
+  /** Types of synchronization events in the geo-distributed system.
+    */
   enum Type:
     /** Replicate table metadata to another region */
     case MetadataSync
+
     /** Replicate data files to another region */
-    case DataSync  
+    case DataSync
+
     /** Notify that a commit has been completed globally */
     case CommitCompleted
 
-  /**
-   * Current status of the synchronization event.
-   */
+  /** Current status of the synchronization event.
+    */
   enum Status:
     /** Event created but not yet processed */
     case Pending
+
     /** Event is currently being processed */
     case InProgress
+
     /** Event completed successfully */
     case Completed
+
     /** Event failed and requires intervention */
     case Failed
 

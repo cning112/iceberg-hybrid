@@ -1,17 +1,15 @@
 package com.streamfirst.iceberg.hybrid.domain
 
-/**
- * Base trait for all domain errors in the system. Provides type-safe error handling
- * with ZIO's error channels instead of Java's Result<T> wrapper.
- */
+/** Base trait for all domain errors in the system. Provides type-safe error handling with ZIO's
+  * error channels instead of Java's Result<T> wrapper.
+  */
 sealed trait DomainError:
   def message: String
   def code: Option[String] = None
 
 object DomainError:
-  /**
-   * Synchronization-related errors
-   */
+  /** Synchronization-related errors
+    */
   sealed trait SyncError extends DomainError
 
   case class SyncEventNotFound(eventId: EventId) extends SyncError:
@@ -26,9 +24,8 @@ object DomainError:
     val message = s"Region not available: ${region.id}"
     override val code = Some("REGION_NOT_AVAILABLE")
 
-  /**
-   * Storage-related errors
-   */
+  /** Storage-related errors
+    */
   sealed trait StorageError extends DomainError
 
   case class StorageLocationNotFound(region: Region) extends StorageError:
@@ -39,14 +36,14 @@ object DomainError:
     val message = s"File not found: ${path.value}"
     override val code = Some("FILE_NOT_FOUND")
 
-  case class FileCopyFailed(source: StoragePath, target: StoragePath, reason: String) extends StorageError:
+  /** Catalog-related errors
+    */
+  sealed trait CatalogError extends DomainError
+
+  case class FileCopyFailed(source: StoragePath, target: StoragePath, reason: String)
+      extends StorageError:
     val message = s"Failed to copy file from $source to $target: $reason"
     override val code = Some("FILE_COPY_FAILED")
-
-  /**
-   * Catalog-related errors
-   */
-  sealed trait CatalogError extends DomainError
 
   case class TableNotFound(tableId: TableId) extends CatalogError:
     val message = s"Table not found: ${tableId.fullyQualifiedName}"
@@ -60,9 +57,8 @@ object DomainError:
     val message = s"Catalog unavailable: $reason"
     override val code = Some("CATALOG_UNAVAILABLE")
 
-  /**
-   * Generic domain errors
-   */
+  /** Generic domain errors
+    */
   case class ValidationError(field: String, reason: String) extends DomainError:
     val message = s"Validation failed for field '$field': $reason"
     override val code = Some("VALIDATION_ERROR")

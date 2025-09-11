@@ -1,6 +1,24 @@
 plugins {
     id 'java'
     id 'scala'
+    id 'com.diffplug.spotless' version '7.2.1'
+}
+
+repositories {
+    mavenCentral()
+}
+
+spotless {
+    java {
+        googleJavaFormat('1.28.0').aosp()
+    }
+    scala {
+        scalafmt()
+    }
+    groovyGradle {
+        target '*.gradle'
+        greclipse()  // Eclipse Groovy formatter
+    }
 }
 
 allprojects {
@@ -29,7 +47,7 @@ configure(subprojects.findAll { it.path.startsWith(':modules:') }) {
     apply plugin: 'scala'
 
     scala {
-        zincVersion = "1.9.6"
+        zincVersion = '1.9.6'
     }
 
     dependencies {
@@ -48,14 +66,17 @@ configure(subprojects.findAll { it.path.startsWith(':modules:') }) {
         testImplementation 'dev.zio:zio-test-junit_3:2.0.19'
     }
 
-    tasks.withType(ScalaCompile) {
-        scalaCompileOptions.additionalParameters = [
-                "-feature",
-                "-deprecation",
-                "-unchecked",
-                "-Wunused:all",
-                "-source:future"
-        ]
+    tasks.withType(ScalaCompile).tap {
+        configureEach {
+            scalaCompileOptions.additionalParameters = [
+                    '-feature',
+                    '-deprecation',
+                    '-unchecked',
+                    '-Wunused:all',
+                    '-Wunused:imports',
+                    '-source:future'
+            ]
+        }
     }
 }
 
@@ -69,7 +90,9 @@ configure(subprojects.findAll { it.path.startsWith(':legacy-java:') || it.path.s
     }
 
     // Handle duplicate files in JAR creation
-    tasks.withType(Jar) {
-        duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    tasks.withType(Jar).tap {
+        configureEach {
+            duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+        }
     }
 }
