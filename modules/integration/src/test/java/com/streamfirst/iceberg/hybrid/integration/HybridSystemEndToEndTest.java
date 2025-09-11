@@ -124,7 +124,7 @@ public class HybridSystemEndToEndTest {
             TEST_TABLE,
             US_EAST,
             Instant.now(),
-            List.of("data/file1.parquet", "data/file2.parquet"),
+            List.of(StoragePath.of("data/file1.parquet"), StoragePath.of("data/file2.parquet")),
             TEST_SCHEMA,
             "INSERT"
         );
@@ -189,7 +189,7 @@ public class HybridSystemEndToEndTest {
             failTable,
             US_EAST,
             Instant.now(),
-            List.of("data/fail-file.parquet"),
+            List.of(StoragePath.of("data/fail-file.parquet")),
             TEST_SCHEMA,
             "INSERT"
         );
@@ -225,7 +225,7 @@ public class HybridSystemEndToEndTest {
             new CommitId("retry-commit-001"),
             US_EAST,
             Instant.now(),
-            List.of("data/retry-file.parquet"),
+            List.of(StoragePath.of("data/retry-file.parquet")),
             TEST_SCHEMA
         );
         

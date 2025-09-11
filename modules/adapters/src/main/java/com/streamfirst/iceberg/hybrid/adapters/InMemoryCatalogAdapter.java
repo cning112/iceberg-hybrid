@@ -8,6 +8,7 @@ import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Predicate;
 
 /**
  * In-memory implementation of CatalogPort for testing and development.
@@ -83,43 +84,29 @@ public class InMemoryCatalogAdapter implements CatalogPort {
     }
 
     @Override
-    public List<TableMetadata> getCommitsSince(TableId tableId, CommitId sinceCommitId) {
+    public List<TableMetadata> getCommits(TableId tableId, Predicate<TableMetadata> criteria) {
         List<TableMetadata> history = tableHistory.get(tableId);
         if (history == null) {
             log.debug("No metadata found for table {}", tableId);
             return List.of();
         }
         
-        // Find the index of the sinceCommitId
-        int startIndex = -1;
-        for (int i = 0; i < history.size(); i++) {
-            if (history.get(i).getCommitId().equals(sinceCommitId)) {
-                startIndex = i + 1; // Start from the next commit
-                break;
-            }
-        }
+        List<TableMetadata> result = history.stream()
+            .filter(criteria)
+            .toList();
         
-        if (startIndex == -1 || startIndex >= history.size()) {
-            log.debug("No commits found after {} for table {}", sinceCommitId, tableId);
-            return List.of();
-        }
-        
-        List<TableMetadata> result = history.subList(startIndex, history.size());
-        log.debug("Found {} commits since {} for table {}", 
-                 result.size(), sinceCommitId, tableId);
-        return new ArrayList<>(result);
+        log.debug("Found {} commits matching criteria for table {}", result.size(), tableId);
+        return result;
     }
 
     @Override
-    public List<TableId> listTables(String namespace) {
-        Set<TableId> tables = namespaces.get(namespace);
-        if (tables == null) {
-            log.debug("No tables found in namespace {}", namespace);
-            return List.of();
-        }
+    public List<TableId> listTables(Predicate<TableId> criteria) {
+        List<TableId> result = namespaces.values().stream()
+            .flatMap(Set::stream)
+            .filter(criteria)
+            .toList();
         
-        List<TableId> result = new ArrayList<>(tables);
-        log.debug("Found {} tables in namespace {}", result.size(), namespace);
+        log.debug("Found {} tables matching criteria", result.size());
         return result;
     }
 

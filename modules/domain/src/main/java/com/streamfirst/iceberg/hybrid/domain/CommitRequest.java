@@ -25,7 +25,7 @@ public class CommitRequest {
     @NonNull Instant requestTime;
     
     /** New data files being added in this commit */
-    @NonNull List<String> newDataFiles;
+    @NonNull List<StoragePath> newDataFiles;
     
     /** The updated table schema (may be unchanged from previous version) */
     @NonNull String updatedSchema;

@@ -141,9 +141,9 @@ public class SyncOrchestrator {
             
             // Copy each data file
             int copiedFiles = 0;
-            for (String dataFile : metadata.getDataFiles()) {
+            for (StoragePath dataFile : metadata.getDataFiles()) {
                 try {
-                    String targetPath = targetBasePath + "/" + extractFileName(dataFile);
+                    StoragePath targetPath = StoragePath.of(targetBasePath + "/" + extractFileName(dataFile.path()));
                     
                     // Only copy if file doesn't already exist
                     if (!storagePort.fileExists(targetStorage, targetPath)) {
@@ -201,7 +201,7 @@ public class SyncOrchestrator {
     /**
      * Updates the status of a sync event with current timestamp.
      */
-    private void updateEventStatus(String eventId, SyncEvent.Status status) {
+    private void updateEventStatus(EventId eventId, SyncEvent.Status status) {
         try {
             syncPort.updateEventStatus(eventId, status);
         } catch (Exception e) {

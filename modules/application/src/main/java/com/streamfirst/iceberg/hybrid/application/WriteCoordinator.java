@@ -51,7 +51,7 @@ public class WriteCoordinator {
     /**
      * Requests approval from all required regions for the commit.
      */
-    private CompletableFuture<SyncResult> requestCommitApproval(CommitRequest request) {
+    private CompletableFuture<Result<String>> requestCommitApproval(CommitRequest request) {
         List<Region> requiredRegions = commitGatePort.getRequiredApprovalRegions(request.getTableId());
         log.debug("Requesting approval from {} regions for {}", requiredRegions.size(), request);
         
@@ -61,12 +61,12 @@ public class WriteCoordinator {
     /**
      * Validates that the approval result indicates success.
      */
-    private CompletableFuture<SyncResult> validateApprovalResult(SyncResult result) {
+    private CompletableFuture<Result<String>> validateApprovalResult(Result<String> result) {
         if (result.isSuccess()) {
             return CompletableFuture.completedFuture(result);
         } else {
             return CompletableFuture.failedFuture(
-                new IllegalStateException("Commit approval failed: " + result.getMessage()));
+                new IllegalStateException("Commit approval failed: " + result.getErrorMessage().orElse("Unknown error")));
         }
     }
 

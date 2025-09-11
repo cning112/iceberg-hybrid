@@ -8,6 +8,7 @@ import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 /**
@@ -18,9 +19,9 @@ import java.util.stream.Collectors;
 @Slf4j
 public class InMemorySyncAdapter implements SyncPort {
     
-    private final Map<String, SyncEvent> events = new ConcurrentHashMap<>();
-    private final Map<Region, List<String>> pendingEventsByRegion = new ConcurrentHashMap<>();
-    private final Map<TableId, List<String>> eventsByTable = new ConcurrentHashMap<>();
+    private final Map<EventId, SyncEvent> events = new ConcurrentHashMap<>();
+    private final Map<Region, List<EventId>> pendingEventsByRegion = new ConcurrentHashMap<>();
+    private final Map<TableId, List<EventId>> eventsByTable = new ConcurrentHashMap<>();
     private final AtomicLong eventCounter = new AtomicLong(1);
 
     @Override
@@ -43,8 +44,16 @@ public class InMemorySyncAdapter implements SyncPort {
     }
 
     @Override
+    public List<SyncEvent> getSyncEvents(Predicate<SyncEvent> predicate) {
+        return events.values().stream()
+                .filter(predicate)
+                .sorted(Comparator.comparing(SyncEvent::getCreatedAt))
+                .toList();
+    }
+
+    @Override
     public List<SyncEvent> getPendingEvents(Region targetRegion) {
-        List<String> eventIds = pendingEventsByRegion.get(targetRegion);
+        List<EventId> eventIds = pendingEventsByRegion.get(targetRegion);
         if (eventIds == null) {
             log.debug("No pending events found for region {}", targetRegion);
             return List.of();
@@ -62,7 +71,7 @@ public class InMemorySyncAdapter implements SyncPort {
     }
 
     @Override
-    public void updateEventStatus(String eventId, SyncEvent.Status status) {
+    public void updateEventStatus(EventId eventId, SyncEvent.Status status) {
         SyncEvent event = events.get(eventId);
         if (event == null) {
             throw new IllegalArgumentException("Event not found: " + eventId);
@@ -76,7 +85,7 @@ public class InMemorySyncAdapter implements SyncPort {
         
         // Remove from pending queue if completed or failed
         if (status == SyncEvent.Status.COMPLETED || status == SyncEvent.Status.FAILED) {
-            List<String> pendingIds = pendingEventsByRegion.get(event.getTargetRegion());
+            List<EventId> pendingIds = pendingEventsByRegion.get(event.getTargetRegion());
             if (pendingIds != null) {
                 pendingIds.remove(eventId);
             }
@@ -87,7 +96,7 @@ public class InMemorySyncAdapter implements SyncPort {
 
     @Override
     public SyncEvent createMetadataSyncEvent(TableMetadata metadata, Region targetRegion) {
-        String eventId = "metadata-sync-" + eventCounter.getAndIncrement();
+        EventId eventId = EventId.generate("metadata-sync");
         Instant now = Instant.now();
         
         SyncEvent event = new SyncEvent(
@@ -108,8 +117,8 @@ public class InMemorySyncAdapter implements SyncPort {
     }
 
     @Override
-    public SyncEvent createDataSyncEvent(TableMetadata metadata, List<String> dataFiles, Region targetRegion) {
-        String eventId = "data-sync-" + eventCounter.getAndIncrement();
+    public SyncEvent createDataSyncEvent(TableMetadata metadata, List<StoragePath> dataFiles, Region targetRegion) {
+        EventId eventId = EventId.generate("data-sync");
         Instant now = Instant.now();
         
         SyncEvent event = new SyncEvent(
@@ -132,7 +141,7 @@ public class InMemorySyncAdapter implements SyncPort {
 
     @Override
     public List<SyncEvent> getEventHistory(TableId tableId, Region region) {
-        List<String> eventIds = eventsByTable.get(tableId);
+        List<EventId> eventIds = eventsByTable.get(tableId);
         if (eventIds == null) {
             log.debug("No events found for table {}", tableId);
             return List.of();
@@ -152,7 +161,7 @@ public class InMemorySyncAdapter implements SyncPort {
 
     @Override
     public List<SyncEvent> getFailedEvents(Region region) {
-        List<String> eventIds = pendingEventsByRegion.get(region);
+        List<EventId> eventIds = pendingEventsByRegion.get(region);
         if (eventIds == null) {
             log.debug("No events found for region {}", region);
             return List.of();
@@ -170,7 +179,7 @@ public class InMemorySyncAdapter implements SyncPort {
     }
 
     @Override
-    public void retryFailedEvent(String eventId) {
+    public void retryFailedEvent(EventId eventId) {
         SyncEvent event = events.get(eventId);
         if (event == null) {
             throw new IllegalArgumentException("Event not found: " + eventId);
@@ -187,7 +196,7 @@ public class InMemorySyncAdapter implements SyncPort {
         events.put(eventId, retriedEvent);
         
         // Add back to pending queue if not already there
-        List<String> pendingIds = pendingEventsByRegion.computeIfAbsent(
+        List<EventId> pendingIds = pendingEventsByRegion.computeIfAbsent(
             event.getTargetRegion(), k -> new ArrayList<>());
         if (!pendingIds.contains(eventId)) {
             pendingIds.add(eventId);

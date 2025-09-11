@@ -3,6 +3,7 @@ package com.streamfirst.iceberg.hybrid.ports;
 import com.streamfirst.iceberg.hybrid.domain.*;
 
 import java.util.List;
+import java.util.function.Predicate;
 
 /**
  * Port for managing inter-region synchronization events.
@@ -19,13 +20,25 @@ public interface SyncPort {
     void publishSyncEvent(SyncEvent event);
     
     /**
+     * Gets sync events matching the specified criteria.
+     * Provides flexible querying for complex synchronization scenarios.
+     * 
+     * @param predicate the filter criteria for sync events
+     * @return list of matching sync events, ordered by creation time
+     */
+    List<SyncEvent> getSyncEvents(Predicate<SyncEvent> predicate);
+    
+    /**
      * Gets all pending sync events for a target region.
      * Used by regional sync workers to process their queue.
      * 
      * @param targetRegion the region to get pending events for
      * @return list of pending sync events, ordered by creation time
      */
-    List<SyncEvent> getPendingEvents(Region targetRegion);
+    default List<SyncEvent> getPendingEvents(Region targetRegion) {
+        return getSyncEvents(event -> event.getTargetRegion().equals(targetRegion) 
+            && event.getStatus() == SyncEvent.Status.PENDING);
+    }
     
     /**
      * Updates the status of a synchronization event.
@@ -34,7 +47,7 @@ public interface SyncPort {
      * @param status the new status (IN_PROGRESS, COMPLETED, FAILED)
      * @throws IllegalArgumentException if event doesn't exist
      */
-    void updateEventStatus(String eventId, SyncEvent.Status status);
+    void updateEventStatus(EventId eventId, SyncEvent.Status status);
     
     /**
      * Creates a metadata synchronization event.
@@ -55,7 +68,7 @@ public interface SyncPort {
      * @param targetRegion the region to sync to
      * @return the created sync event
      */
-    SyncEvent createDataSyncEvent(TableMetadata metadata, List<String> dataFiles, Region targetRegion);
+    SyncEvent createDataSyncEvent(TableMetadata metadata, List<StoragePath> dataFiles, Region targetRegion);
     
     /**
      * Gets the synchronization history for a table in a specific region.
@@ -64,7 +77,10 @@ public interface SyncPort {
      * @param region the region to get history for
      * @return list of sync events for the table in that region
      */
-    List<SyncEvent> getEventHistory(TableId tableId, Region region);
+    default List<SyncEvent> getEventHistory(TableId tableId, Region region) {
+        return getSyncEvents(event -> event.getTableId().equals(tableId) 
+            && event.getTargetRegion().equals(region));
+    }
     
     /**
      * Gets all failed synchronization events for a region.
@@ -73,7 +89,10 @@ public interface SyncPort {
      * @param region the region to get failed events for
      * @return list of failed sync events
      */
-    List<SyncEvent> getFailedEvents(Region region);
+    default List<SyncEvent> getFailedEvents(Region region) {
+        return getSyncEvents(event -> event.getTargetRegion().equals(region) 
+            && event.getStatus() == SyncEvent.Status.FAILED);
+    }
     
     /**
      * Retries a failed synchronization event.
@@ -82,5 +101,5 @@ public interface SyncPort {
      * @param eventId the event identifier to retry
      * @throws IllegalArgumentException if event doesn't exist or isn't failed
      */
-    void retryFailedEvent(String eventId);
+    void retryFailedEvent(EventId eventId);
 }

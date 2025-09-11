@@ -6,6 +6,7 @@ import com.streamfirst.iceberg.hybrid.domain.TableId;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Predicate;
 
 /**
  * Port for global storage and region registry.
@@ -31,12 +32,26 @@ public interface RegistryPort {
     void updateStorageLocation(StorageLocation location);
     
     /**
-     * Removes a storage location from the registry.
+     * Removes storage locations matching the given predicate.
+     * This provides maximum flexibility for different removal criteria.
+     * 
+     * @param predicate the condition that storage locations must satisfy to be removed
+     * @return number of storage locations that were removed
+     */
+    int removeStorageLocations(Predicate<StorageLocation> predicate);
+    
+    /**
+     * Removes a specific storage location by region and type.
+     * Convenience method for the most common removal pattern.
      * 
      * @param region the region of the storage location
      * @param type the type of storage (e.g., "primary", "backup")
+     * @return true if a storage location was removed, false if none found
      */
-    void removeStorageLocation(Region region, String type);
+    default boolean removeStorageLocation(Region region, String type) {
+        return removeStorageLocations(location -> 
+            location.region().equals(region) && location.type().equals(type)) > 0;
+    }
     
     /**
      * Gets a specific storage location by region and type.

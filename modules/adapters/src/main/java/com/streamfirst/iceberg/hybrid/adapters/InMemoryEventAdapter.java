@@ -6,7 +6,9 @@ import lombok.extern.slf4j.Slf4j;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
+import java.util.function.Predicate;
 
 /**
  * In-memory implementation of EventPort for testing and development.
@@ -18,6 +20,9 @@ public class InMemoryEventAdapter implements EventPort {
     
     private final Map<String, List<Consumer<Object>>> topicSubscribers = new ConcurrentHashMap<>();
     private final Map<String, Map<Class<?>, List<Consumer<Object>>>> typedSubscribers = new ConcurrentHashMap<>();
+    private final Map<String, String> subscriptionToTopic = new ConcurrentHashMap<>();
+    private final Map<String, Consumer<Object>> subscriptionToHandler = new ConcurrentHashMap<>();
+    private final AtomicLong subscriptionCounter = new AtomicLong(1);
     private volatile boolean connected = true;
 
     @Override
@@ -69,42 +74,118 @@ public class InMemoryEventAdapter implements EventPort {
     }
 
     @Override
-    public void subscribe(String topic, Consumer<Object> handler) {
+    public String subscribe(String topic, Consumer<Object> handler) {
         log.debug("Subscribing to topic '{}'", topic);
+        
+        String subscriptionId = "sub-" + subscriptionCounter.getAndIncrement();
         
         topicSubscribers.computeIfAbsent(topic, k -> new CopyOnWriteArrayList<>())
                        .add(handler);
         
-        log.info("Subscribed to topic '{}' - total subscribers: {}", 
-                topic, topicSubscribers.get(topic).size());
+        subscriptionToTopic.put(subscriptionId, topic);
+        subscriptionToHandler.put(subscriptionId, handler);
+        
+        log.info("Subscribed to topic '{}' with ID {} - total subscribers: {}", 
+                topic, subscriptionId, topicSubscribers.get(topic).size());
+        
+        return subscriptionId;
     }
 
     @Override
-    public void subscribe(String topic, Class<?> eventType, Consumer<Object> handler) {
+    public String subscribe(String topic, Class<?> eventType, Consumer<Object> handler) {
         log.debug("Subscribing to topic '{}' for event type '{}'", topic, eventType.getSimpleName());
+        
+        String subscriptionId = "sub-" + subscriptionCounter.getAndIncrement();
         
         typedSubscribers.computeIfAbsent(topic, k -> new ConcurrentHashMap<>())
                        .computeIfAbsent(eventType, k -> new CopyOnWriteArrayList<>())
                        .add(handler);
         
-        log.info("Subscribed to topic '{}' for type '{}' - total typed subscribers: {}", 
-                topic, eventType.getSimpleName(), 
+        subscriptionToTopic.put(subscriptionId, topic);
+        subscriptionToHandler.put(subscriptionId, handler);
+        
+        log.info("Subscribed to topic '{}' for type '{}' with ID {} - total typed subscribers: {}", 
+                topic, eventType.getSimpleName(), subscriptionId,
                 typedSubscribers.get(topic).get(eventType).size());
+        
+        return subscriptionId;
     }
 
     @Override
-    public void unsubscribe(String topic) {
-        log.debug("Unsubscribing from topic '{}'", topic);
+    public int unsubscribeMatching(Predicate<String> predicate) {
+        int removed = 0;
         
-        List<Consumer<Object>> removed = topicSubscribers.remove(topic);
-        Map<Class<?>, List<Consumer<Object>>> typedRemoved = typedSubscribers.remove(topic);
+        Iterator<Map.Entry<String, String>> iterator = subscriptionToTopic.entrySet().iterator();
+        while (iterator.hasNext()) {
+            Map.Entry<String, String> entry = iterator.next();
+            String subscriptionId = entry.getKey();
+            
+            if (predicate.test(subscriptionId)) {
+                String topic = entry.getValue();
+                Consumer<Object> handler = subscriptionToHandler.get(subscriptionId);
+                
+                // Remove from topic subscribers
+                List<Consumer<Object>> subscribers = topicSubscribers.get(topic);
+                if (subscribers != null) {
+                    subscribers.remove(handler);
+                }
+                
+                // Remove from typed subscribers
+                Map<Class<?>, List<Consumer<Object>>> typedSubs = typedSubscribers.get(topic);
+                if (typedSubs != null) {
+                    typedSubs.values().forEach(list -> list.remove(handler));
+                }
+                
+                // Remove from tracking maps
+                iterator.remove();
+                subscriptionToHandler.remove(subscriptionId);
+                removed++;
+            }
+        }
         
-        int removedCount = (removed != null ? removed.size() : 0) + 
-                          (typedRemoved != null ? typedRemoved.values().stream()
-                                                               .mapToInt(List::size)
-                                                               .sum() : 0);
+        log.info("Unsubscribed {} subscriptions matching predicate", removed);
+        return removed;
+    }
+
+    @Override
+    public boolean unsubscribe(String subscriptionId) {
+        log.debug("Unsubscribing subscription '{}'", subscriptionId);
         
-        log.info("Unsubscribed from topic '{}' - removed {} subscribers", topic, removedCount);
+        String topic = subscriptionToTopic.get(subscriptionId);
+        if (topic == null) {
+            log.debug("Subscription '{}' not found", subscriptionId);
+            return false;
+        }
+        
+        Consumer<Object> handler = subscriptionToHandler.get(subscriptionId);
+        if (handler == null) {
+            log.debug("Handler for subscription '{}' not found", subscriptionId);
+            return false;
+        }
+        
+        // Remove from topic subscribers
+        List<Consumer<Object>> subscribers = topicSubscribers.get(topic);
+        if (subscribers != null) {
+            subscribers.remove(handler);
+        }
+        
+        // Remove from typed subscribers
+        Map<Class<?>, List<Consumer<Object>>> typedSubs = typedSubscribers.get(topic);
+        if (typedSubs != null) {
+            typedSubs.values().forEach(list -> list.remove(handler));
+        }
+        
+        // Remove from tracking maps
+        subscriptionToTopic.remove(subscriptionId);
+        subscriptionToHandler.remove(subscriptionId);
+        
+        log.info("Unsubscribed subscription '{}' from topic '{}'", subscriptionId, topic);
+        return true;
+    }
+
+    @Override
+    public String getSubscriptionTopic(String subscriptionId) {
+        return subscriptionToTopic.get(subscriptionId);
     }
 
     @Override
@@ -174,5 +255,7 @@ public class InMemoryEventAdapter implements EventPort {
         log.info("Clearing all subscriptions");
         topicSubscribers.clear();
         typedSubscribers.clear();
+        subscriptionToTopic.clear();
+        subscriptionToHandler.clear();
     }
 }

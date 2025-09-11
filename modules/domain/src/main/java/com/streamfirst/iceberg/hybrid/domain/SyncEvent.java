@@ -42,7 +42,7 @@ public class SyncEvent {
     }
 
     /** Unique identifier for this sync event */
-    @NonNull String eventId;
+    @NonNull EventId eventId;
     
     /** The type of synchronization being performed */
     @NonNull Type type;

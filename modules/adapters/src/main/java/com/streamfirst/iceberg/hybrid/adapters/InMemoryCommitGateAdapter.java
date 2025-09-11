@@ -1,15 +1,18 @@
 package com.streamfirst.iceberg.hybrid.adapters;
 
+import com.streamfirst.iceberg.hybrid.domain.CommitApproval;
 import com.streamfirst.iceberg.hybrid.domain.CommitRequest;
 import com.streamfirst.iceberg.hybrid.domain.Region;
+import com.streamfirst.iceberg.hybrid.domain.Result;
 import com.streamfirst.iceberg.hybrid.domain.TableId;
 import com.streamfirst.iceberg.hybrid.ports.CommitGatePort;
-import com.streamfirst.iceberg.hybrid.ports.SyncResult;
 import lombok.extern.slf4j.Slf4j;
 
+import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Predicate;
 
 /**
  * In-memory implementation of CommitGatePort for testing and development.
@@ -19,27 +22,28 @@ import java.util.concurrent.ConcurrentHashMap;
 @Slf4j
 public class InMemoryCommitGateAdapter implements CommitGatePort {
     
-    private final Map<CommitRequest, Set<Region>> commitApprovals = new ConcurrentHashMap<>();
-    private final Map<CommitRequest, Set<Region>> commitRejections = new ConcurrentHashMap<>();
-    private final Map<CommitRequest, String> rejectionReasons = new ConcurrentHashMap<>();
+    private final Map<CommitRequest, List<CommitApproval>> commitApprovals = new ConcurrentHashMap<>();
     private final Map<Region, List<CommitRequest>> pendingCommitsByRegion = new ConcurrentHashMap<>();
-    private final Map<TableId, List<Region>> requiredRegionsByTable = new ConcurrentHashMap<>();
+    private final Map<TableId, Set<Region>> requiredRegionsByTable = new ConcurrentHashMap<>();
 
     @Override
-    public CompletableFuture<SyncResult> requestCommitApproval(CommitRequest request) {
+    public CompletableFuture<Result<String>> requestCommitApproval(CommitRequest request) {
         log.info("Requesting commit approval for {}", request);
         
         // Get required regions for this table
-        List<Region> requiredRegions = getRequiredApprovalRegions(request.getTableId());
+        Set<Region> requiredRegions = Set.copyOf(getRequiredApprovalRegions(request.getTableId()));
         
         if (requiredRegions.isEmpty()) {
             log.warn("No regions required for table {} - auto-approving", request.getTableId());
-            return CompletableFuture.completedFuture(SyncResult.success("Auto-approved (no regions required)"));
+            return CompletableFuture.completedFuture(Result.success("Auto-approved (no regions required)"));
         }
         
-        // Initialize approval tracking
-        commitApprovals.put(request, ConcurrentHashMap.newKeySet());
-        commitRejections.put(request, ConcurrentHashMap.newKeySet());
+        // Initialize pending approvals for all required regions
+        List<CommitApproval> approvals = new ArrayList<>();
+        for (Region region : requiredRegions) {
+            approvals.add(CommitApproval.pending(request, region));
+        }
+        commitApprovals.put(request, approvals);
         
         // Add to pending queues for each required region
         for (Region region : requiredRegions) {
@@ -61,43 +65,48 @@ public class InMemoryCommitGateAdapter implements CommitGatePort {
                 }
                 
                 if (isCommitApproved(request)) {
-                    return SyncResult.success("Approved by all required regions");
+                    return Result.success("Approved by all required regions");
                 } else {
-                    return SyncResult.failure("Failed to get approval from all regions");
+                    return Result.failure("Failed to get approval from all regions");
                 }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
-                return SyncResult.failure("Approval request interrupted", "INTERRUPTED");
+                return Result.failure("Approval request interrupted", "INTERRUPTED");
             } catch (Exception e) {
                 log.error("Error during commit approval process", e);
-                return SyncResult.failure("Approval process failed: " + e.getMessage(), "APPROVAL_ERROR");
+                return Result.failure("Approval process failed: " + e.getMessage(), "APPROVAL_ERROR");
             }
         });
     }
 
     @Override
-    public SyncResult approveCommit(CommitRequest request, Region approvingRegion) {
+    public Result<String> approveCommit(CommitRequest request, Region approvingRegion) {
         log.debug("Region {} approving commit for {}", approvingRegion, request.getTableId());
         
-        // Check if this region can approve this commit
-        List<Region> requiredRegions = getRequiredApprovalRegions(request.getTableId());
-        if (!requiredRegions.contains(approvingRegion)) {
-            String message = "Region " + approvingRegion + " is not required for table " + request.getTableId();
+        List<CommitApproval> approvals = commitApprovals.get(request);
+        if (approvals == null) {
+            String message = "No approval tracking found for commit request";
             log.warn(message);
-            return SyncResult.failure(message, "INVALID_REGION");
+            return Result.failure(message, "STATE_NOT_FOUND");
         }
         
-        // Check if already rejected
-        Set<Region> rejections = commitRejections.get(request);
-        if (rejections != null && rejections.contains(approvingRegion)) {
-            String message = "Region " + approvingRegion + " already rejected this commit";
-            log.warn(message);
-            return SyncResult.failure(message, "ALREADY_REJECTED");
+        // Find and update the approval for this region
+        boolean found = false;
+        for (int i = 0; i < approvals.size(); i++) {
+            CommitApproval approval = approvals.get(i);
+            if (approval.region().equals(approvingRegion)) {
+                if (approval.status() == CommitApproval.ApprovalStatus.REJECTED) {
+                    return Result.failure("Region already rejected this commit", "ALREADY_REJECTED");
+                }
+                approvals.set(i, CommitApproval.approved(request, approvingRegion));
+                found = true;
+                break;
+            }
         }
         
-        // Add approval
-        Set<Region> approvals = commitApprovals.computeIfAbsent(request, k -> ConcurrentHashMap.newKeySet());
-        approvals.add(approvingRegion);
+        if (!found) {
+            return Result.failure("Region not required for this commit", "INVALID_REGION");
+        }
         
         // Remove from pending queue
         List<CommitRequest> pendingForRegion = pendingCommitsByRegion.get(approvingRegion);
@@ -105,31 +114,45 @@ public class InMemoryCommitGateAdapter implements CommitGatePort {
             pendingForRegion.remove(request);
         }
         
-        log.info("Region {} approved commit for {} ({}/{} approvals)", 
-                approvingRegion, request.getTableId(), approvals.size(), requiredRegions.size());
+        long approvedCount = approvals.stream()
+            .filter(a -> a.status() == CommitApproval.ApprovalStatus.APPROVED)
+            .count();
         
-        return SyncResult.success("Approval recorded from " + approvingRegion);
+        log.info("Region {} approved commit for {} ({}/{} approvals)", 
+                approvingRegion, request.getTableId(), approvedCount, approvals.size());
+        
+        return Result.success("Approval recorded from " + approvingRegion);
     }
 
     @Override
-    public SyncResult rejectCommit(CommitRequest request, Region rejectingRegion, String reason) {
+    public Result<String> rejectCommit(CommitRequest request, Region rejectingRegion, String reason) {
         log.warn("Region {} rejecting commit for {}: {}", 
                 rejectingRegion, request.getTableId(), reason);
         
-        // Check if this region can reject this commit
-        List<Region> requiredRegions = getRequiredApprovalRegions(request.getTableId());
-        if (!requiredRegions.contains(rejectingRegion)) {
-            String message = "Region " + rejectingRegion + " is not required for table " + request.getTableId();
+        List<CommitApproval> approvals = commitApprovals.get(request);
+        if (approvals == null) {
+            String message = "No approval tracking found for commit request";
             log.warn(message);
-            return SyncResult.failure(message, "INVALID_REGION");
+            return Result.failure(message, "STATE_NOT_FOUND");
         }
         
-        // Add rejection
-        Set<Region> rejections = commitRejections.computeIfAbsent(request, k -> ConcurrentHashMap.newKeySet());
-        rejections.add(rejectingRegion);
-        rejectionReasons.put(request, reason);
+        // Find and update the approval for this region
+        boolean found = false;
+        for (int i = 0; i < approvals.size(); i++) {
+            CommitApproval approval = approvals.get(i);
+            if (approval.region().equals(rejectingRegion)) {
+                approvals.set(i, CommitApproval.rejected(request, rejectingRegion, reason));
+                found = true;
+                break;
+            }
+        }
+        
+        if (!found) {
+            return Result.failure("Region not required for this commit", "INVALID_REGION");
+        }
         
         // Remove from pending queues for all regions (commit is now rejected)
+        Set<Region> requiredRegions = Set.copyOf(getRequiredApprovalRegions(request.getTableId()));
         for (Region region : requiredRegions) {
             List<CommitRequest> pendingForRegion = pendingCommitsByRegion.get(region);
             if (pendingForRegion != null) {
@@ -140,7 +163,15 @@ public class InMemoryCommitGateAdapter implements CommitGatePort {
         log.info("Region {} rejected commit for {} - commit is now rejected", 
                 rejectingRegion, request.getTableId());
         
-        return SyncResult.success("Rejection recorded from " + rejectingRegion);
+        return Result.success("Rejection recorded from " + rejectingRegion);
+    }
+
+    @Override
+    public List<CommitApproval> getCommitApprovals(Predicate<CommitApproval> predicate) {
+        return commitApprovals.values().stream()
+                .flatMap(List::stream)
+                .filter(predicate)
+                .toList();
     }
 
     @Override
@@ -174,27 +205,21 @@ public class InMemoryCommitGateAdapter implements CommitGatePort {
 
     @Override
     public boolean isCommitApproved(CommitRequest request) {
-        Set<Region> approvals = commitApprovals.get(request);
-        Set<Region> rejections = commitRejections.get(request);
-        List<Region> requiredRegions = getRequiredApprovalRegions(request.getTableId());
-        
-        // If any region rejected, commit is not approved
-        if (rejections != null && !rejections.isEmpty()) {
-            log.debug("Commit for {} is rejected by regions: {}", 
-                     request.getTableId(), rejections);
+        List<CommitApproval> approvals = commitApprovals.get(request);
+        if (approvals == null) {
             return false;
         }
         
-        // Check if all required regions have approved
-        boolean approved = approvals != null && 
-                          approvals.containsAll(requiredRegions) && 
-                          approvals.size() == requiredRegions.size();
+        // Check if any rejection exists
+        boolean hasRejection = approvals.stream()
+            .anyMatch(a -> a.status() == CommitApproval.ApprovalStatus.REJECTED);
+        if (hasRejection) {
+            return false;
+        }
         
-        log.debug("Commit for {} is approved: {} ({}/{} regions)", 
-                 request.getTableId(), approved, 
-                 approvals != null ? approvals.size() : 0, requiredRegions.size());
-        
-        return approved;
+        // Check if all are approved
+        return approvals.stream()
+            .allMatch(a -> a.status() == CommitApproval.ApprovalStatus.APPROVED);
     }
 
     @Override
@@ -203,8 +228,6 @@ public class InMemoryCommitGateAdapter implements CommitGatePort {
         
         // Clean up approval tracking
         commitApprovals.remove(request);
-        commitRejections.remove(request);
-        rejectionReasons.remove(request);
         
         // Remove from all pending queues
         for (List<CommitRequest> pending : pendingCommitsByRegion.values()) {
@@ -216,7 +239,7 @@ public class InMemoryCommitGateAdapter implements CommitGatePort {
 
     @Override
     public List<Region> getRequiredApprovalRegions(TableId tableId) {
-        List<Region> required = requiredRegionsByTable.get(tableId);
+        Set<Region> required = requiredRegionsByTable.get(tableId);
         if (required == null) {
             log.debug("No specific regions required for table {} - using empty list", tableId);
             return List.of();
@@ -233,7 +256,7 @@ public class InMemoryCommitGateAdapter implements CommitGatePort {
      */
     public void setRequiredApprovalRegions(TableId tableId, List<Region> regions) {
         log.info("Setting required approval regions for table {}: {}", tableId, regions);
-        requiredRegionsByTable.put(tableId, new ArrayList<>(regions));
+        requiredRegionsByTable.put(tableId, new HashSet<>(regions));
     }
 
     /**
@@ -242,8 +265,6 @@ public class InMemoryCommitGateAdapter implements CommitGatePort {
     public void clear() {
         log.info("Clearing all commit gate data");
         commitApprovals.clear();
-        commitRejections.clear();
-        rejectionReasons.clear();
         pendingCommitsByRegion.clear();
         requiredRegionsByTable.clear();
     }
@@ -258,10 +279,16 @@ public class InMemoryCommitGateAdapter implements CommitGatePort {
                                                           .mapToInt(List::size)
                                                           .sum());
         stats.put("tracked_commits", commitApprovals.size());
-        stats.put("approved_commits", (int) commitApprovals.entrySet().stream()
-                                                          .filter(entry -> isCommitApproved(entry.getKey()))
-                                                          .count());
-        stats.put("rejected_commits", commitRejections.size());
+        
+        long approvedCommits = commitApprovals.entrySet().stream()
+            .filter(entry -> entry.getValue().stream().allMatch(a -> a.status() == CommitApproval.ApprovalStatus.APPROVED))
+            .count();
+        stats.put("approved_commits", (int) approvedCommits);
+        
+        long rejectedCommits = commitApprovals.entrySet().stream()
+            .filter(entry -> entry.getValue().stream().anyMatch(a -> a.status() == CommitApproval.ApprovalStatus.REJECTED))
+            .count();
+        stats.put("rejected_commits", (int) rejectedCommits);
         
         return stats;
     }

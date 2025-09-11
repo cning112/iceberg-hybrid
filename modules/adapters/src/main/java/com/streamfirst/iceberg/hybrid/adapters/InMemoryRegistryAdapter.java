@@ -71,24 +71,41 @@ public class InMemoryRegistryAdapter implements RegistryPort {
     }
 
     @Override
-    public void removeStorageLocation(Region region, String type) {
-        log.debug("Removing storage location for region {} type {}", region, type);
+    public int removeStorageLocations(java.util.function.Predicate<StorageLocation> predicate) {
+        log.debug("Removing storage locations matching predicate");
         
-        Map<String, StorageLocation> regionStorageMap = storageLocationsByRegion.get(region);
-        if (regionStorageMap != null) {
-            StorageLocation removed = regionStorageMap.remove(type);
-            if (removed != null) {
-                log.info("Removed storage location for region {} type {}: {}", 
-                        region, type, removed.uri());
-            } else {
-                log.warn("No storage location found to remove for region {} type {}", region, type);
+        int removedCount = 0;
+        java.util.Iterator<java.util.Map.Entry<Region, Map<String, StorageLocation>>> regionIterator = 
+            storageLocationsByRegion.entrySet().iterator();
+            
+        while (regionIterator.hasNext()) {
+            java.util.Map.Entry<Region, Map<String, StorageLocation>> regionEntry = regionIterator.next();
+            Region region = regionEntry.getKey();
+            Map<String, StorageLocation> regionStorageMap = regionEntry.getValue();
+            
+            java.util.Iterator<java.util.Map.Entry<String, StorageLocation>> typeIterator = 
+                regionStorageMap.entrySet().iterator();
+                
+            while (typeIterator.hasNext()) {
+                java.util.Map.Entry<String, StorageLocation> typeEntry = typeIterator.next();
+                StorageLocation location = typeEntry.getValue();
+                
+                if (predicate.test(location)) {
+                    typeIterator.remove();
+                    removedCount++;
+                    log.info("Removed storage location for region {} type {}: {}", 
+                            region, typeEntry.getKey(), location.uri());
+                }
             }
             
             // Clean up empty maps
             if (regionStorageMap.isEmpty()) {
-                storageLocationsByRegion.remove(region);
+                regionIterator.remove();
             }
         }
+        
+        log.debug("Removed {} storage locations matching predicate", removedCount);
+        return removedCount;
     }
 
     @Override

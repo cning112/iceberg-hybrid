@@ -1,6 +1,7 @@
 package com.streamfirst.iceberg.hybrid.ports;
 
 import java.util.function.Consumer;
+import java.util.function.Predicate;
 
 /**
  * Port for asynchronous event messaging infrastructure.
@@ -32,9 +33,10 @@ public interface EventPort {
      * 
      * @param topic the topic to subscribe to
      * @param handler the handler to process received events
+     * @return subscription ID for managing this specific subscription
      * @throws RuntimeException if subscription fails
      */
-    void subscribe(String topic, Consumer<Object> handler);
+    String subscribe(String topic, Consumer<Object> handler);
     
     /**
      * Subscribes to a topic with type-safe event handling.
@@ -43,16 +45,46 @@ public interface EventPort {
      * @param topic the topic to subscribe to
      * @param eventType the expected event type
      * @param handler the handler to process received events
+     * @return subscription ID for managing this specific subscription
      * @throws RuntimeException if subscription fails
      */
-    void subscribe(String topic, Class<?> eventType, Consumer<Object> handler);
+    String subscribe(String topic, Class<?> eventType, Consumer<Object> handler);
     
     /**
-     * Unsubscribes from a topic.
+     * Unsubscribes subscriptions matching the specified criteria.
+     * Provides flexible subscription management for complex event scenarios.
+     * 
+     * @param predicate the filter criteria for subscriptions to remove
+     * @return number of subscriptions that were removed
+     */
+    int unsubscribeMatching(Predicate<String> predicate);
+    
+    /**
+     * Unsubscribes a specific subscription by its ID.
+     * 
+     * @param subscriptionId the subscription ID to remove
+     * @return true if subscription was found and removed, false otherwise
+     */
+    boolean unsubscribe(String subscriptionId);
+    
+    /**
+     * Unsubscribes all subscriptions from a topic.
      * 
      * @param topic the topic to unsubscribe from
+     * @return number of subscriptions that were removed
      */
-    void unsubscribe(String topic);
+    default int unsubscribeFromTopic(String topic) {
+        return unsubscribeMatching(subscriptionId -> 
+            getSubscriptionTopic(subscriptionId).equals(topic));
+    }
+    
+    /**
+     * Gets the topic for a given subscription ID.
+     * 
+     * @param subscriptionId the subscription ID
+     * @return the topic this subscription is bound to
+     */
+    String getSubscriptionTopic(String subscriptionId);
     
     /**
      * Checks if the event port is connected to the message broker.

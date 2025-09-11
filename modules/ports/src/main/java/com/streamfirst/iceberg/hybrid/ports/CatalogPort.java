@@ -4,6 +4,7 @@ import com.streamfirst.iceberg.hybrid.domain.*;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Predicate;
 
 /**
  * Port for global transactional catalog operations.
@@ -39,6 +40,16 @@ public interface CatalogPort {
     Optional<TableMetadata> getMetadata(TableId tableId, CommitId commitId);
     
     /**
+     * Gets commits for a table matching specific criteria.
+     * Used for flexible synchronization queries between regions.
+     * 
+     * @param tableId the table identifier
+     * @param criteria predicate to filter commits
+     * @return list of metadata versions matching criteria in chronological order
+     */
+    List<TableMetadata> getCommits(TableId tableId, Predicate<TableMetadata> criteria);
+    
+    /**
      * Gets all commits for a table since a specific commit ID.
      * Used for incremental synchronization between regions.
      * 
@@ -46,7 +57,18 @@ public interface CatalogPort {
      * @param sinceCommitId the starting commit (exclusive)
      * @return list of metadata versions in chronological order
      */
-    List<TableMetadata> getCommitsSince(TableId tableId, CommitId sinceCommitId);
+    default List<TableMetadata> getCommitsSince(TableId tableId, CommitId sinceCommitId) {
+        return getCommits(tableId, metadata -> metadata.getCommitId().value().compareTo(sinceCommitId.value()) > 0);
+    }
+    
+    /**
+     * Lists tables matching specific criteria.
+     * Allows flexible filtering of tables across namespaces.
+     * 
+     * @param criteria predicate to filter tables
+     * @return list of table identifiers matching criteria
+     */
+    List<TableId> listTables(Predicate<TableId> criteria);
     
     /**
      * Lists all tables in a namespace.
@@ -54,7 +76,9 @@ public interface CatalogPort {
      * @param namespace the namespace to search
      * @return list of table identifiers in the namespace
      */
-    List<TableId> listTables(String namespace);
+    default List<TableId> listTables(String namespace) {
+        return listTables(tableId -> tableId.namespace().equals(namespace));
+    }
     
     /**
      * Checks if a table exists in the catalog.

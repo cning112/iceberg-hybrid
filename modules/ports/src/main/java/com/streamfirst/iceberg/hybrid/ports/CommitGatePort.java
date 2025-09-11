@@ -1,11 +1,15 @@
 package com.streamfirst.iceberg.hybrid.ports;
 
+import com.streamfirst.iceberg.hybrid.domain.CommitApproval;
 import com.streamfirst.iceberg.hybrid.domain.CommitRequest;
 import com.streamfirst.iceberg.hybrid.domain.Region;
+import com.streamfirst.iceberg.hybrid.domain.Result;
 import com.streamfirst.iceberg.hybrid.domain.TableId;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Predicate;
 
 /**
  * Port for regional commit gate coordination.
@@ -21,7 +25,7 @@ public interface CommitGatePort {
      * @param request the commit request to approve
      * @return a future that completes when all regions have responded
      */
-    CompletableFuture<SyncResult> requestCommitApproval(CommitRequest request);
+    CompletableFuture<Result<String>> requestCommitApproval(CommitRequest request);
     
     /**
      * Records approval for a commit from a specific region.
@@ -30,7 +34,7 @@ public interface CommitGatePort {
      * @param approvingRegion the region providing approval
      * @return result indicating success or failure of approval recording
      */
-    SyncResult approveCommit(CommitRequest request, Region approvingRegion);
+    Result<String> approveCommit(CommitRequest request, Region approvingRegion);
     
     /**
      * Records rejection for a commit from a specific region.
@@ -41,7 +45,26 @@ public interface CommitGatePort {
      * @param reason the reason for rejection
      * @return result indicating success or failure of rejection recording
      */
-    SyncResult rejectCommit(CommitRequest request, Region rejectingRegion, String reason);
+    Result<String> rejectCommit(CommitRequest request, Region rejectingRegion, String reason);
+    
+    /**
+     * Gets commit approvals matching the specified criteria.
+     * Provides flexible querying for complex commit gate scenarios.
+     * 
+     * @param predicate the filter criteria for commit approvals
+     * @return list of matching commit approvals
+     */
+    List<CommitApproval> getCommitApprovals(Predicate<CommitApproval> predicate);
+    
+    /**
+     * Gets all approvals for a specific commit request.
+     * 
+     * @param request the commit request to get approvals for
+     * @return list of approvals from different regions
+     */
+    default List<CommitApproval> getApprovals(CommitRequest request) {
+        return getCommitApprovals(approval -> approval.request().equals(request));
+    }
     
     /**
      * Gets all pending commit requests for a specific region.
@@ -50,7 +73,15 @@ public interface CommitGatePort {
      * @param region the region to get pending commits for
      * @return list of commit requests awaiting approval from this region
      */
-    List<CommitRequest> getPendingCommits(Region region);
+    default List<CommitRequest> getPendingCommits(Region region) {
+        return getCommitApprovals(approval -> 
+            approval.region().equals(region) && 
+            approval.status() == CommitApproval.ApprovalStatus.PENDING)
+            .stream()
+            .map(CommitApproval::request)
+            .distinct()
+            .toList();
+    }
     
     /**
      * Gets all pending commit requests for a specific table.
@@ -58,7 +89,30 @@ public interface CommitGatePort {
      * @param tableId the table to get pending commits for
      * @return list of commit requests for this table
      */
-    List<CommitRequest> getPendingCommits(TableId tableId);
+    default List<CommitRequest> getPendingCommits(TableId tableId) {
+        return getCommitApprovals(approval -> 
+            approval.request().getTableId().equals(tableId) && 
+            approval.status() == CommitApproval.ApprovalStatus.PENDING)
+            .stream()
+            .map(CommitApproval::request)
+            .distinct()
+            .toList();
+    }
+    
+    /**
+     * Gets commit requests matching the specified criteria.
+     * Provides flexible querying for complex commit gate scenarios.
+     * 
+     * @param predicate the filter criteria for commit requests
+     * @return list of matching commit requests
+     */
+    default List<CommitRequest> getCommitRequests(Predicate<CommitRequest> predicate) {
+        return getCommitApprovals(approval -> predicate.test(approval.request()))
+            .stream()
+            .map(CommitApproval::request)
+            .distinct()
+            .toList();
+    }
     
     /**
      * Checks if a commit has received approval from all required regions.

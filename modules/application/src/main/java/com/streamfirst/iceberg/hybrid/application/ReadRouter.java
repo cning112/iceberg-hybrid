@@ -182,7 +182,7 @@ public class ReadRouter {
             // Transform file paths to be region-specific
             String basePath = dataPath.get();
             return metadata.getDataFiles().stream()
-                .map(file -> basePath + "/" + extractFileName(file))
+                .map(file -> basePath + "/" + extractFileName(file.path()))
                 .toList();
                 
         } catch (Exception e) {

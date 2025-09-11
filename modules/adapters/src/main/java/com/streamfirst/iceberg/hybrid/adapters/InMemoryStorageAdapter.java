@@ -2,6 +2,7 @@ package com.streamfirst.iceberg.hybrid.adapters;
 
 import com.streamfirst.iceberg.hybrid.domain.Region;
 import com.streamfirst.iceberg.hybrid.domain.StorageLocation;
+import com.streamfirst.iceberg.hybrid.domain.StoragePath;
 import com.streamfirst.iceberg.hybrid.ports.StoragePort;
 import lombok.extern.slf4j.Slf4j;
 
@@ -10,6 +11,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Predicate;
 
 /**
  * In-memory implementation of StoragePort for testing and development.
@@ -26,18 +28,18 @@ public class InMemoryStorageAdapter implements StoragePort {
     private final Map<Region, StorageLocation> regionStorageMap = new ConcurrentHashMap<>();
 
     @Override
-    public void writeFile(StorageLocation location, String path, byte[] data) {
+    public void writeFile(StorageLocation location, StoragePath path, byte[] data) {
         log.debug("Writing file {} to storage {} ({} bytes)", 
                  path, location.uri(), data.length);
         
         storageContents.computeIfAbsent(location.uri(), k -> new ConcurrentHashMap<>())
-                      .put(path, Arrays.copyOf(data, data.length));
+                      .put(path.toString(), Arrays.copyOf(data, data.length));
         
         log.debug("Successfully wrote file {} to storage {}", path, location.uri());
     }
 
     @Override
-    public void writeFile(StorageLocation location, String path, InputStream data) {
+    public void writeFile(StorageLocation location, StoragePath path, InputStream data) {
         try {
             byte[] bytes = data.readAllBytes();
             writeFile(location, path, bytes);
@@ -48,7 +50,7 @@ public class InMemoryStorageAdapter implements StoragePort {
     }
 
     @Override
-    public byte[] readFile(StorageLocation location, String path) {
+    public byte[] readFile(StorageLocation location, StoragePath path) {
         log.debug("Reading file {} from storage {}", path, location.uri());
         
         Map<String, byte[]> storage = storageContents.get(location.uri());
@@ -56,7 +58,7 @@ public class InMemoryStorageAdapter implements StoragePort {
             throw new RuntimeException("Storage location not found: " + location.uri());
         }
         
-        byte[] content = storage.get(path);
+        byte[] content = storage.get(path.toString());
         if (content == null) {
             throw new RuntimeException("File not found: " + path + " in storage " + location.uri());
         }
@@ -67,22 +69,22 @@ public class InMemoryStorageAdapter implements StoragePort {
     }
 
     @Override
-    public InputStream readFileStream(StorageLocation location, String path) {
+    public InputStream readFileStream(StorageLocation location, StoragePath path) {
         byte[] content = readFile(location, path);
         return new ByteArrayInputStream(content);
     }
 
     @Override
-    public boolean fileExists(StorageLocation location, String path) {
+    public boolean fileExists(StorageLocation location, StoragePath path) {
         Map<String, byte[]> storage = storageContents.get(location.uri());
-        boolean exists = storage != null && storage.containsKey(path);
+        boolean exists = storage != null && storage.containsKey(path.toString());
         
         log.debug("File {} exists in storage {}: {}", path, location.uri(), exists);
         return exists;
     }
 
     @Override
-    public void deleteFile(StorageLocation location, String path) {
+    public void deleteFile(StorageLocation location, StoragePath path) {
         log.debug("Deleting file {} from storage {}", path, location.uri());
         
         Map<String, byte[]> storage = storageContents.get(location.uri());
@@ -90,7 +92,7 @@ public class InMemoryStorageAdapter implements StoragePort {
             throw new RuntimeException("Storage location not found: " + location.uri());
         }
         
-        byte[] removed = storage.remove(path);
+        byte[] removed = storage.remove(path.toString());
         if (removed == null) {
             throw new RuntimeException("File not found: " + path + " in storage " + location.uri());
         }
@@ -99,8 +101,8 @@ public class InMemoryStorageAdapter implements StoragePort {
     }
 
     @Override
-    public void copyFile(StorageLocation source, String sourcePath, 
-                        StorageLocation target, String targetPath) {
+    public void copyFile(StorageLocation source, StoragePath sourcePath, 
+                        StorageLocation target, StoragePath targetPath) {
         log.debug("Copying file from {}:{} to {}:{}", 
                  source.uri(), sourcePath, target.uri(), targetPath);
         
@@ -115,27 +117,28 @@ public class InMemoryStorageAdapter implements StoragePort {
     }
 
     @Override
-    public List<String> listFiles(StorageLocation location, String prefix) {
-        log.debug("Listing files with prefix '{}' in storage {}", prefix, location.uri());
-        
+    public List<StoragePath> listFiles(StorageLocation location, Predicate<StoragePath> predicate) {
+        log.debug("Listing files matching predicate in storage {}", location.uri());
+
         Map<String, byte[]> storage = storageContents.get(location.uri());
         if (storage == null) {
             log.debug("Storage location not found: {}", location.uri());
             return List.of();
         }
-        
-        List<String> matchingFiles = storage.keySet().stream()
-                .filter(path -> path.startsWith(prefix))
-                .sorted()
+
+        List<StoragePath> matchingFiles = storage.keySet().stream()
+                .map(StoragePath::of)
+                .filter(predicate)
+                .sorted((a, b) -> a.toString().compareTo(b.toString()))
                 .toList();
-        
-        log.debug("Found {} files with prefix '{}' in storage {}", 
-                 matchingFiles.size(), prefix, location.uri());
+
+        log.debug("Found {} files matching predicate in storage {}",
+                 matchingFiles.size(), location.uri());
         return matchingFiles;
     }
 
     @Override
-    public long getFileSize(StorageLocation location, String path) {
+    public long getFileSize(StorageLocation location, StoragePath path) {
         log.debug("Getting size of file {} in storage {}", path, location.uri());
         
         Map<String, byte[]> storage = storageContents.get(location.uri());
@@ -143,7 +146,7 @@ public class InMemoryStorageAdapter implements StoragePort {
             throw new RuntimeException("Storage location not found: " + location.uri());
         }
         
-        byte[] content = storage.get(path);
+        byte[] content = storage.get(path.toString());
         if (content == null) {
             throw new RuntimeException("File not found: " + path + " in storage " + location.uri());
         }

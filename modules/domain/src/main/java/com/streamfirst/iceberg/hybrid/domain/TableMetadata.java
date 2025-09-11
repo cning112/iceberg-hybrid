@@ -29,7 +29,7 @@ public class TableMetadata {
     @NonNull Instant timestamp;
     
     /** List of data file paths that comprise the table at this version */
-    @NonNull List<String> dataFiles;
+    @NonNull List<StoragePath> dataFiles;
     
     /** The table schema as JSON (Iceberg schema format) */
     @NonNull String schema;
