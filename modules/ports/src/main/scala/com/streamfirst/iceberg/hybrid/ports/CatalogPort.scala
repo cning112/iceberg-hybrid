@@ -59,3 +59,14 @@ object CatalogPort:
 
   def createTable(metadata: TableMetadata): ZIO[CatalogPort, CatalogError, Unit] =
     ZIO.serviceWithZIO[CatalogPort](_.createTable(metadata))
+
+  def dropTable(tableId: TableId): ZIO[CatalogPort, CatalogError, Unit] =
+    ZIO.serviceWithZIO[CatalogPort](_.dropTable(tableId))
+
+  def getCommitHistory(tableId: TableId): ZIO[CatalogPort, CatalogError, List[CommitId]] =
+    ZIO.serviceWithZIO[CatalogPort](_.getCommitHistory(tableId))
+
+  def getMetadataBatch(
+      requests: List[(TableId, CommitId)]
+  ): ZIO[CatalogPort, CatalogError, Map[(TableId, CommitId), TableMetadata]] =
+    ZIO.serviceWithZIO[CatalogPort](_.getMetadataBatch(requests))
