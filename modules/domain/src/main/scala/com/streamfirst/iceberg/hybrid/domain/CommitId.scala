@@ -12,8 +12,7 @@ object CommitId:
     require(value.trim.nonEmpty, "Commit ID cannot be null or empty")
     value
 
-  def generate(): CommitId =
-    s"commit-${UUID.randomUUID()}"
+  def generate(): CommitId = s"commit-${UUID.randomUUID()}"
 
   extension (commitId: CommitId)
     def value: String = commitId

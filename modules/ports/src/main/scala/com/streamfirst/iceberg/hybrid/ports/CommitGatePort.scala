@@ -23,27 +23,23 @@ trait CommitGatePort:
     */
   def notifyCommitFailed(commitId: CommitId, region: Region, error: String): IO[SyncError, Unit]
 
-  /** Gets the current status of a commit across all regions.
-    */
+  /** Gets the current status of a commit across all regions. */
   def getCommitStatus(commitId: CommitId): IO[SyncError, CommitStatus]
 
-  /** Lists all pending commit requests.
-    */
+  /** Lists all pending commit requests. */
   def getPendingCommits: IO[SyncError, List[CommitRequest]]
 
-  /** Cancels a pending commit request.
-    */
+  /** Cancels a pending commit request. */
   def cancelCommitRequest(requestId: String): IO[SyncError, Unit]
 
-/** Represents the global status of a commit across all regions.
-  */
+/** Represents the global status of a commit across all regions. */
 final case class CommitStatus(
-  commitId: CommitId,
-  tableId: TableId,
-  status: CommitStatus.Status,
-  completedRegions: List[Region],
-  failedRegions: List[Region],
-  pendingRegions: List[Region]
+    commitId: CommitId,
+    tableId: TableId,
+    status: CommitStatus.Status,
+    completedRegions: List[Region],
+    failedRegions: List[Region],
+    pendingRegions: List[Region]
 )
 
 object CommitStatus:
@@ -55,21 +51,23 @@ object CommitStatus:
     case Cancelled // Cancelled before completion
 
 object CommitGatePort:
-  /** ZIO service accessors for dependency injection
-    */
+  /** ZIO service accessors for dependency injection */
   def requestCommitApproval(
-    request: CommitRequest): ZIO[CommitGatePort, SyncError, CommitApproval] =
+      request: CommitRequest
+  ): ZIO[CommitGatePort, SyncError, CommitApproval] =
     ZIO.serviceWithZIO[CommitGatePort](_.requestCommitApproval(request))
 
   def notifyCommitCompleted(
-    commitId: CommitId,
-    region: Region): ZIO[CommitGatePort, SyncError, Unit] =
+      commitId: CommitId,
+      region: Region
+  ): ZIO[CommitGatePort, SyncError, Unit] =
     ZIO.serviceWithZIO[CommitGatePort](_.notifyCommitCompleted(commitId, region))
 
   def notifyCommitFailed(
-    commitId: CommitId,
-    region: Region,
-    error: String): ZIO[CommitGatePort, SyncError, Unit] =
+      commitId: CommitId,
+      region: Region,
+      error: String
+  ): ZIO[CommitGatePort, SyncError, Unit] =
     ZIO.serviceWithZIO[CommitGatePort](_.notifyCommitFailed(commitId, region, error))
 
   def getCommitStatus(commitId: CommitId): ZIO[CommitGatePort, SyncError, CommitStatus] =

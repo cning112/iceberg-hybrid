@@ -6,18 +6,15 @@ import java.time.Instant
   * can proceed and sync events will be created.
   */
 final case class CommitApproval(
-  requestId: String,
-  tableId: TableId,
-  commitId: CommitId,
-  approvedAt: Instant,
-  approvedRegions: List[Region]
+    requestId: String,
+    tableId: TableId,
+    commitId: CommitId,
+    approvedAt: Instant,
+    approvedRegions: List[Region]
 )
 
 object CommitApproval:
-  def approve(
-    request: CommitRequest,
-    regions: List[Region]
-  ): CommitApproval =
+  def approve(request: CommitRequest, regions: List[Region]): CommitApproval =
     CommitApproval(
       requestId = request.requestId,
       tableId = request.tableId,

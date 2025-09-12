@@ -6,19 +6,15 @@ import java.time.Instant
   * ensure consistency across regions before allowing the commit to proceed.
   */
 final case class CommitRequest(
-  tableId: TableId,
-  requestId: String,
-  sourceRegion: Region,
-  metadata: TableMetadata,
-  timestamp: Instant
+    tableId: TableId,
+    requestId: String,
+    sourceRegion: Region,
+    metadata: TableMetadata,
+    timestamp: Instant
 )
 
 object CommitRequest:
-  def create(
-    tableId: TableId,
-    sourceRegion: Region,
-    metadata: TableMetadata
-  ): CommitRequest =
+  def create(tableId: TableId, sourceRegion: Region, metadata: TableMetadata): CommitRequest =
     CommitRequest(
       tableId = tableId,
       requestId = EventId.generate("commit-req").value,

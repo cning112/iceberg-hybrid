@@ -8,8 +8,7 @@ sealed trait DomainError:
   def code: Option[String] = None
 
 object DomainError:
-  /** Synchronization-related errors
-    */
+  /** Synchronization-related errors */
   sealed trait SyncError extends DomainError
 
   case class SyncEventNotFound(eventId: EventId) extends SyncError:
@@ -33,19 +32,11 @@ object DomainError:
     override val code = Some("STORAGE_SYNC_FAILED")
     val message = s"Storage sync failed for region ${region.id}: ${underlying.message}"
 
-  case class DataReplicationFailed(
-    tableId: TableId,
-    sourceRegion: Region,
-    targetRegion: Region,
-    reason: String)
-      extends SyncError:
-    override val code = Some("DATA_REPLICATION_FAILED")
-    val message =
-      s"Data replication failed for table ${tableId.fullyQualifiedName} from ${sourceRegion.id} to ${targetRegion.id}: $reason"
-
-  /** Storage-related errors
-    */
+  /** Storage-related errors */
   sealed trait StorageError extends DomainError
+
+  /** Catalog-related errors */
+  sealed trait CatalogError extends DomainError
 
   case class StorageLocationNotFound(region: Region) extends StorageError:
     val message = s"Storage location not found for region: ${region.id}"
@@ -55,9 +46,15 @@ object DomainError:
     val message = s"File not found: ${path.value}"
     override val code = Some("FILE_NOT_FOUND")
 
-  /** Catalog-related errors
-    */
-  sealed trait CatalogError extends DomainError
+  case class DataReplicationFailed(
+      tableId: TableId,
+      sourceRegion: Region,
+      targetRegion: Region,
+      reason: String
+  ) extends SyncError:
+    override val code = Some("DATA_REPLICATION_FAILED")
+    val message = s"Data replication failed for table ${tableId
+        .fullyQualifiedName} from ${sourceRegion.id} to ${targetRegion.id}: $reason"
 
   case class FileCopyFailed(source: StoragePath, target: StoragePath, reason: String)
       extends StorageError:
@@ -76,8 +73,7 @@ object DomainError:
     val message = s"Catalog unavailable: $reason"
     override val code = Some("CATALOG_UNAVAILABLE")
 
-  /** Generic domain errors
-    */
+  /** Generic domain errors */
   case class ValidationError(field: String, reason: String) extends DomainError:
     val message = s"Validation failed for field '$field': $reason"
     override val code = Some("VALIDATION_ERROR")

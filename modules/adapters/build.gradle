@@ -3,7 +3,7 @@ dependencies {
     implementation project(':modules:domain')
     implementation project(':modules:ports')
     implementation project(':modules:application')
-    
+
     // External system dependencies will be added as needed
     // e.g., Apache Iceberg, AWS SDK, Kafka, Redis, etc.
 }

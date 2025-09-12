@@ -8,49 +8,41 @@ import zio.{IO, ZIO}
   * (Nessie, Hive, Hadoop, etc.) using ZIO effects for type-safe operations.
   */
 trait CatalogPort:
-  /** Gets table metadata for a specific commit/version.
-    */
+  /** Gets table metadata for a specific commit/version. */
   def getMetadata(tableId: TableId, commitId: CommitId): IO[CatalogError, Option[TableMetadata]]
 
-  /** Gets the latest metadata for a table.
-    */
+  /** Gets the latest metadata for a table. */
   def getLatestMetadata(tableId: TableId): IO[CatalogError, Option[TableMetadata]]
 
-  /** Commits new metadata for a table, creating a new version.
-    */
+  /** Commits new metadata for a table, creating a new version. */
   def commitMetadata(metadata: TableMetadata): IO[CatalogError, CommitId]
 
-  /** Lists all tables in a namespace.
-    */
+  /** Lists all tables in a namespace. */
   def listTables(namespace: String): IO[CatalogError, List[TableId]]
 
-  /** Checks if a table exists in the catalog.
-    */
+  /** Checks if a table exists in the catalog. */
   def tableExists(tableId: TableId): IO[CatalogError, Boolean]
 
-  /** Creates a new table with the specified metadata.
-    */
+  /** Creates a new table with the specified metadata. */
   def createTable(metadata: TableMetadata): IO[CatalogError, Unit]
 
-  /** Drops a table from the catalog.
-    */
+  /** Drops a table from the catalog. */
   def dropTable(tableId: TableId): IO[CatalogError, Unit]
 
-  /** Gets all commit history for a table.
-    */
+  /** Gets all commit history for a table. */
   def getCommitHistory(tableId: TableId): IO[CatalogError, List[CommitId]]
 
-  /** Gets metadata for multiple commits in parallel.
-    */
+  /** Gets metadata for multiple commits in parallel. */
   def getMetadataBatch(
-    requests: List[(TableId, CommitId)]): IO[CatalogError, Map[(TableId, CommitId), TableMetadata]]
+      requests: List[(TableId, CommitId)]
+  ): IO[CatalogError, Map[(TableId, CommitId), TableMetadata]]
 
 object CatalogPort:
-  /** ZIO service accessors for dependency injection
-    */
+  /** ZIO service accessors for dependency injection */
   def getMetadata(
-    tableId: TableId,
-    commitId: CommitId): ZIO[CatalogPort, CatalogError, Option[TableMetadata]] =
+      tableId: TableId,
+      commitId: CommitId
+  ): ZIO[CatalogPort, CatalogError, Option[TableMetadata]] =
     ZIO.serviceWithZIO[CatalogPort](_.getMetadata(tableId, commitId))
 
   def getLatestMetadata(tableId: TableId): ZIO[CatalogPort, CatalogError, Option[TableMetadata]] =

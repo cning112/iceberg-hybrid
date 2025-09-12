@@ -7,12 +7,12 @@ import java.time.Instant
   * versioned by commit ID and replicated across regions for geo-distributed access.
   */
 final case class TableMetadata(
-  tableId: TableId,
-  commitId: CommitId,
-  sourceRegion: Region,
-  timestamp: Instant,
-  dataFiles: List[StoragePath],
-  schema: String
+    tableId: TableId,
+    commitId: CommitId,
+    sourceRegion: Region,
+    timestamp: Instant,
+    dataFiles: List[StoragePath],
+    schema: String
 ):
   override def toString: String =
     s"TableMetadata(tableId=$tableId, commitId=$commitId, sourceRegion=${sourceRegion.id}, " +
@@ -20,10 +20,10 @@ final case class TableMetadata(
 
 object TableMetadata:
   def create(
-    tableId: TableId,
-    sourceRegion: Region,
-    dataFiles: List[StoragePath],
-    schema: String
+      tableId: TableId,
+      sourceRegion: Region,
+      dataFiles: List[StoragePath],
+      schema: String
   ): TableMetadata =
     TableMetadata(
       tableId = tableId,

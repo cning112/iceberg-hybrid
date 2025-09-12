@@ -9,15 +9,14 @@ import com.streamfirst.iceberg.hybrid.domain.{
   TableId,
   TableMetadata
 }
-import zio.{ IO, ZIO }
+import zio.{IO, ZIO}
 
 /** Port for managing inter-region synchronization events. Coordinates the replication of metadata
   * and data between geographic regions using ZIO effects for type-safe error handling and
   * composability.
   */
 trait SyncPort:
-  /** Publishes a synchronization event to trigger replication.
-    */
+  /** Publishes a synchronization event to trigger replication. */
   def publishSyncEvent(event: SyncEvent): IO[SyncError, Unit]
 
   /** Gets sync events matching the specified criteria. Provides flexible querying for complex
@@ -33,33 +32,29 @@ trait SyncPort:
       event.targetRegion == targetRegion && event.status == SyncEvent.Status.Pending
     }
 
-  /** Updates the status of a synchronization event.
-    */
+  /** Updates the status of a synchronization event. */
   def updateEventStatus(eventId: EventId, status: SyncEvent.Status): IO[SyncError, Unit]
 
   /** Creates a metadata synchronization event. This triggers replication of table metadata to the
     * target region.
     */
   def createMetadataSyncEvent(
-    metadata: TableMetadata,
-    targetRegion: Region
+      metadata: TableMetadata,
+      targetRegion: Region
   ): IO[SyncError, SyncEvent]
 
   /** Creates a data synchronization event. This triggers replication of data files to the target
     * region.
     */
   def createDataSyncEvent(
-    metadata: TableMetadata,
-    dataFiles: List[StoragePath],
-    targetRegion: Region
+      metadata: TableMetadata,
+      dataFiles: List[StoragePath],
+      targetRegion: Region
   ): IO[SyncError, SyncEvent]
 
-  /** Gets the synchronization history for a table in a specific region.
-    */
+  /** Gets the synchronization history for a table in a specific region. */
   def getEventHistory(tableId: TableId, region: Region): IO[SyncError, List[SyncEvent]] =
-    getSyncEvents { event =>
-      event.tableId == tableId && event.targetRegion == region
-    }
+    getSyncEvents { event => event.tableId == tableId && event.targetRegion == region }
 
   /** Gets all failed synchronization events for a region. Used for monitoring and manual
     * intervention.
@@ -69,13 +64,11 @@ trait SyncPort:
       event.targetRegion == region && event.status == SyncEvent.Status.Failed
     }
 
-  /** Retries a failed synchronization event. Resets the event status to PENDING for reprocessing.
-    */
+  /** Retries a failed synchronization event. Resets the event status to PENDING for reprocessing. */
   def retryFailedEvent(eventId: EventId): IO[SyncError, Unit]
 
 object SyncPort:
-  /** ZIO service accessor for dependency injection
-    */
+  /** ZIO service accessor for dependency injection */
   def publishSyncEvent(event: SyncEvent): ZIO[SyncPort, SyncError, Unit] =
     ZIO.serviceWithZIO[SyncPort](_.publishSyncEvent(event))
 
@@ -86,20 +79,21 @@ object SyncPort:
     ZIO.serviceWithZIO[SyncPort](_.getPendingEvents(targetRegion))
 
   def updateEventStatus(
-    eventId: EventId,
-    status: SyncEvent.Status): ZIO[SyncPort, SyncError, Unit] =
+      eventId: EventId,
+      status: SyncEvent.Status
+  ): ZIO[SyncPort, SyncError, Unit] =
     ZIO.serviceWithZIO[SyncPort](_.updateEventStatus(eventId, status))
 
   def createMetadataSyncEvent(
-    metadata: TableMetadata,
-    targetRegion: Region
+      metadata: TableMetadata,
+      targetRegion: Region
   ): ZIO[SyncPort, SyncError, SyncEvent] =
     ZIO.serviceWithZIO[SyncPort](_.createMetadataSyncEvent(metadata, targetRegion))
 
   def createDataSyncEvent(
-    metadata: TableMetadata,
-    dataFiles: List[StoragePath],
-    targetRegion: Region
+      metadata: TableMetadata,
+      dataFiles: List[StoragePath],
+      targetRegion: Region
   ): ZIO[SyncPort, SyncError, SyncEvent] =
     ZIO.serviceWithZIO[SyncPort](_.createDataSyncEvent(metadata, dataFiles, targetRegion))
 

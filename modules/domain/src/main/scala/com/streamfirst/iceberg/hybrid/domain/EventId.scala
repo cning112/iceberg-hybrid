@@ -12,11 +12,9 @@ object EventId:
     require(value.trim.nonEmpty, "Event ID cannot be null or empty")
     value
 
-  def generate(): EventId =
-    s"evt-${UUID.randomUUID()}"
+  def generate(): EventId = s"evt-${UUID.randomUUID()}"
 
-  def generate(prefix: String): EventId =
-    s"$prefix-${UUID.randomUUID()}"
+  def generate(prefix: String): EventId = s"$prefix-${UUID.randomUUID()}"
 
   extension (eventId: EventId)
     def value: String = eventId
