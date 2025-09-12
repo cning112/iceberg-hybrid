@@ -1,0 +1,15 @@
+plugins {
+    id 'scala'
+}
+
+dependencies {
+    // Dependencies on all other modules for integration testing
+    testImplementation project(':modules:domain')
+    testImplementation project(':modules:ports')
+    testImplementation project(':modules:application')
+    testImplementation project(':modules:adapters')
+
+    // ZIO Test dependencies are already included from parent configuration
+    // Additional test utilities for integration testing
+    testImplementation 'dev.zio:zio-test-magnolia_3:2.1.21'
+}

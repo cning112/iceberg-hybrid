@@ -47,23 +47,23 @@ configure(subprojects.findAll { it.path.startsWith(':modules:') }) {
     apply plugin: 'scala'
 
     scala {
-        zincVersion = '1.9.6'
+        zincVersion = '1.10.8'
     }
 
     dependencies {
         implementation 'org.scala-lang:scala3-library_3:3.3.6'
 
         // ZIO dependencies
-        implementation 'dev.zio:zio_3:2.0.19'
-        implementation 'dev.zio:zio-streams_3:2.0.19'
-        implementation 'dev.zio:zio-logging_3:2.1.14'
-        implementation 'dev.zio:zio-config_3:4.0.0-RC16'
-        implementation 'dev.zio:zio-json_3:0.6.2'
+        implementation 'dev.zio:zio_3:2.1.21'
+        implementation 'dev.zio:zio-streams_3:2.1.21'
+        implementation 'dev.zio:zio-logging_3:2.5.1'
+        implementation 'dev.zio:zio-config_3:4.0.5'
+        implementation 'dev.zio:zio-json_3:0.7.44'
 
         // Test dependencies
-        testImplementation 'dev.zio:zio-test_3:2.0.19'
-        testImplementation 'dev.zio:zio-test-sbt_3:2.0.19'
-        testImplementation 'dev.zio:zio-test-junit_3:2.0.19'
+        testImplementation 'dev.zio:zio-test_3:2.1.21'
+        testImplementation 'dev.zio:zio-test-sbt_3:2.1.21'
+        testImplementation 'dev.zio:zio-test-junit_3:2.1.21'
     }
 
     tasks.withType(ScalaCompile).tap {

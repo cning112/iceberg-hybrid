@@ -13,6 +13,7 @@ include(
         "modules:ports",
         "modules:application",
         "modules:adapters",
+        "modules:integration",
 
         // Legacy Java modules for reference
         "legacy-java:domain-java",
