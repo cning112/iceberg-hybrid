@@ -1,9 +1,9 @@
 package com.streamfirst.iceberg.hybrid.application
 
-import com.streamfirst.iceberg.hybrid.domain.*
-import com.streamfirst.iceberg.hybrid.domain.DomainError.*
-import com.streamfirst.iceberg.hybrid.ports.*
-import zio.logging.*
+import com.streamfirst.iceberg.hybrid.domain.DomainError.{CatalogError, SyncError}
+import com.streamfirst.iceberg.hybrid.domain.{CommitId, CommitRequest, DomainError, Region, TableId, TableMetadata}
+import com.streamfirst.iceberg.hybrid.ports.{CatalogPort, CommitGatePort, CommitStatus, RegistryPort, SyncPort}
+import zio.{IO, ZIO, ZLayer}
 
 /** Coordinates write operations across regions. Handles the distributed commit protocol to ensure
   * consistency when writing to geo-distributed tables.

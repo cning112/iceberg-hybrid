@@ -1,99 +1,124 @@
 package com.streamfirst.iceberg.hybrid.adapters
 
-import com.streamfirst.iceberg.hybrid.domain.*
-import com.streamfirst.iceberg.hybrid.domain.DomainError.*
+import com.streamfirst.iceberg.hybrid.domain.DomainError.SyncError
+import com.streamfirst.iceberg.hybrid.domain.{
+  DomainError,
+  EventId,
+  Region,
+  StoragePath,
+  SyncEvent,
+  TableMetadata
+}
 import com.streamfirst.iceberg.hybrid.ports.SyncPort
-
 import java.time.Instant
-import scala.collection.concurrent.TrieMap
+import zio.{ IO, Ref, ZIO, ZLayer }
 
 /** In-memory implementation of SyncPort for testing and development. NOT suitable for production
-  * use - data is lost on restart.
+  * use - data is lost on restart. Uses ZIO Ref for thread-safe atomic operations.
   */
-final case class InMemorySyncAdapter() extends SyncPort:
-  private val events = TrieMap[EventId, SyncEvent]()
+final case class InMemorySyncAdapter(
+  events: Ref[Map[EventId, SyncEvent]]
+) extends SyncPort:
 
   override def publishSyncEvent(event: SyncEvent): IO[SyncError, Unit] =
-    ZIO
-      .succeed {
-        events.put(event.eventId, event)
-        ()
-      }
+    events
+      .update(_ + (event.eventId -> event))
       .tap(_ => ZIO.logDebug(s"Published sync event ${event.eventId}"))
 
   override def getSyncEvents(predicate: SyncEvent => Boolean): IO[SyncError, List[SyncEvent]] =
-    ZIO.succeed {
-      events.values.filter(predicate).toList.sortBy(_.createdAt)
-    }
+    events.get.map(
+      _.values
+        .filter(predicate)
+        .toList
+        .sortBy(_.createdAt))
 
   override def updateEventStatus(eventId: EventId, status: SyncEvent.Status): IO[SyncError, Unit] =
-    ZIO
-      .attempt {
-        events.get(eventId) match
-          case Some(event) =>
-            val updatedEvent = event.withStatus(status, Instant.now())
-            events.put(eventId, updatedEvent)
-            ()
+    for {
+      now <- ZIO.succeed(Instant.now())
+      result <- events.modify { m =>
+        m.get(eventId) match
+          case Some(ev) =>
+            val updated =
+              ev.withStatus(status, now)
+            (Right(()): Either[SyncError, Unit], m.updated(eventId, updated))
           case None =>
-            throw new IllegalArgumentException(s"Event not found: $eventId")
+            (
+              Left(
+                DomainError
+                  .SyncEventNotFound(eventId)),
+              m)
       }
-      .catchAll(error => ZIO.fail(DomainError.SyncEventNotFound(eventId)))
-      .tap(_ => ZIO.logDebug(s"Updated event $eventId status to $status"))
+      _ <- ZIO.fromEither(result)
+      _ <- ZIO.logDebug(s"Updated event $eventId status to $status")
+    } yield ()
 
   override def createMetadataSyncEvent(
     metadata: TableMetadata,
     targetRegion: Region
   ): IO[SyncError, SyncEvent] =
-    ZIO
-      .succeed {
-        val event = SyncEvent.create(
+    for {
+      event <- ZIO.succeed(
+        SyncEvent.create(
           SyncEvent.Type.MetadataSync,
           metadata.tableId,
           metadata.commitId,
           metadata.sourceRegion,
           targetRegion
         )
-        events.put(event.eventId, event)
-        event
-      }
-      .tap(event => ZIO.logDebug(s"Created metadata sync event ${event.eventId}"))
+      )
+      _ <- events.update(_.updated(event.eventId, event))
+      _ <- ZIO.logDebug(s"Created metadata sync event ${event.eventId}")
+    } yield event
 
   override def createDataSyncEvent(
     metadata: TableMetadata,
     dataFiles: List[StoragePath],
     targetRegion: Region
   ): IO[SyncError, SyncEvent] =
-    ZIO
-      .succeed {
-        val event = SyncEvent.create(
+    for {
+      event <- ZIO.succeed(
+        SyncEvent.create(
           SyncEvent.Type.DataSync,
           metadata.tableId,
           metadata.commitId,
           metadata.sourceRegion,
           targetRegion
         )
-        events.put(event.eventId, event)
-        event
-      }
-      .tap(event => ZIO.logDebug(s"Created data sync event ${event.eventId}"))
+      )
+      _ <- events.update(_.updated(event.eventId, event))
+      _ <- ZIO.logDebug(s"Created data sync event ${event.eventId}")
+    } yield event
 
   override def retryFailedEvent(eventId: EventId): IO[SyncError, Unit] =
-    ZIO
-      .attempt {
-        events.get(eventId) match
-          case Some(event) if event.status == SyncEvent.Status.Failed =>
-            val retriedEvent = event.withStatus(SyncEvent.Status.Pending, Instant.now())
-            events.put(eventId, retriedEvent)
-            ()
-          case Some(event) =>
-            throw new IllegalArgumentException(
-              s"Event $eventId is not in failed state: ${event.status}")
+    for {
+      now <- ZIO.succeed(Instant.now())
+      result <- events.modify { m =>
+        m.get(eventId) match
+          case Some(ev) if ev.status == SyncEvent.Status.Failed =>
+            val retried = ev.withStatus(SyncEvent.Status.Pending, now)
+            (Right(()): Either[SyncError, Unit], m.updated(eventId, retried))
+          case Some(ev) =>
+            // keep map unchanged
+            (
+              Left(
+                DomainError
+                  .SyncEventNotFound(eventId)): Either[SyncError, Unit],
+              m)
           case None =>
-            throw new IllegalArgumentException(s"Event not found: $eventId")
+            (
+              Left(
+                DomainError
+                  .SyncEventNotFound(eventId)): Either[SyncError, Unit],
+              m)
       }
-      .catchAll(error => ZIO.fail(DomainError.SyncEventNotFound(eventId)))
-      .tap(_ => ZIO.logDebug(s"Retried failed event $eventId"))
+      _ <- ZIO.fromEither(result)
+      _ <- ZIO.logDebug(s"Retried failed event $eventId")
+    } yield ()
 
 object InMemorySyncAdapter:
   val live: ZLayer[Any, Nothing, SyncPort] =
-    ZLayer.succeed(InMemorySyncAdapter())
+    ZLayer.fromZIO {
+      for {
+        ref <- Ref.make(Map.empty[EventId, SyncEvent])
+      } yield InMemorySyncAdapter(ref)
+    }

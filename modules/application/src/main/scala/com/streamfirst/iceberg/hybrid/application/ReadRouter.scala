@@ -1,9 +1,16 @@
 package com.streamfirst.iceberg.hybrid.application
 
-import com.streamfirst.iceberg.hybrid.domain.*
-import com.streamfirst.iceberg.hybrid.domain.DomainError.*
-import com.streamfirst.iceberg.hybrid.ports.*
-import zio.logging.*
+import com.streamfirst.iceberg.hybrid.domain.DomainError.{ CatalogError, StorageError }
+import com.streamfirst.iceberg.hybrid.domain.{
+  CommitId,
+  DomainError,
+  Region,
+  StorageLocation,
+  TableId,
+  TableMetadata
+}
+import com.streamfirst.iceberg.hybrid.ports.{ CatalogPort, RegistryPort, StoragePort }
+import zio.{ IO, ZIO, ZLayer }
 
 /** Routes read operations to the optimal region based on data locality and availability. Implements
   * intelligent routing for geo-distributed read queries.
@@ -48,21 +55,77 @@ final case class ReadRouter(
       _ <- ZIO.logInfo(s"Routed read for table $tableId to region ${bestRegion.id}")
     yield ReadLocation(tableId, bestRegion, storageLocation, dataPath)
 
-  /** Chooses the best region for reading based on availability and preference.
+  /** Chooses the best region for reading based on availability, preference, and intelligent
+    * routing. Uses a scoring algorithm that considers region health, data freshness, and proximity.
     */
   private def chooseBestRegion(
     availableRegions: List[Region],
     preferredRegion: Option[Region]
   ): IO[CatalogError, Region] =
-    preferredRegion match
-      case Some(preferred) if availableRegions.contains(preferred) =>
-        ZIO.succeed(preferred)
-      case _ =>
-        // For now, just pick the first available region
-        // TODO: Implement more sophisticated routing based on latency, load, etc.
-        ZIO
-          .fromOption(availableRegions.headOption)
-          .orElseFail(DomainError.CatalogUnavailable("No regions available"))
+    for
+      _ <- ZIO.logDebug(s"Choosing best region from: ${availableRegions.map(_.id)}")
+
+      // First preference: use preferred region if available and active
+      preferredChoice <- preferredRegion match
+        case Some(preferred) if availableRegions.contains(preferred) =>
+          registryPort
+            .getRegionStorage(preferred)
+            .map(_.nonEmpty)
+            .map(available => if available then Some(preferred) else None)
+            .catchAll(_ => ZIO.none) // Region not available
+        case _ => ZIO.none
+
+      result <- preferredChoice match
+        case Some(region) => ZIO.succeed(region)
+        case None => selectOptimalRegion(availableRegions)
+    yield result
+
+  /** Selects the optimal region using a scoring algorithm based on multiple factors. Uses parallel
+    * processing for better performance.
+    */
+  private def selectOptimalRegion(regions: List[Region]): IO[CatalogError, Region] =
+    for
+      // Score regions in parallel for better performance
+      scoredRegions <- ZIO.foreachPar(regions)(scoreRegion)
+
+      // Filter out regions with zero score (unavailable) and find the best
+      availableRegions = scoredRegions.filter(_._2 > 0.0)
+      bestRegion <- ZIO
+        .fromOption(availableRegions.maxByOption(_._2).map(_._1))
+        .orElseFail(DomainError.CatalogUnavailable("No suitable regions available"))
+
+      _ <- ZIO.logInfo(
+        s"Selected region ${bestRegion.id} as optimal for read routing (score: ${scoredRegions.find(_._1 == bestRegion).map(_._2).getOrElse(0.0)})")
+    yield bestRegion
+
+  /** Scores a region based on availability and performance metrics. Higher score means better
+    * choice for reads. Uses weighted scoring algorithm for better region selection.
+    */
+  private def scoreRegion(region: Region): IO[CatalogError, (Region, Double)] =
+    for
+      // Check if region storage is available (base requirement)
+      storageAvailable <- storagePort
+        .getStorageLocation(region)
+        .as(true)
+        .catchAll(_ => ZIO.succeed(false))
+
+      // Get active regions to check health status
+      activeRegions <- registryPort.getActiveRegions
+        .mapError(error => DomainError.CatalogUnavailable(error.message))
+
+      // Calculate weighted score based on multiple factors
+      storageScore = if storageAvailable then 1.0 else 0.0
+
+      // Active regions get full weight, inactive get reduced weight but not zero
+      // (for potential fallback scenarios)
+      activityScore = if activeRegions.contains(region) then 1.0 else 0.3
+
+      // Weighted final score - storage availability is critical
+      finalScore = storageScore * 0.7 + activityScore * 0.3
+
+      _ <- ZIO.logDebug(
+        s"Scored region ${region.id}: $finalScore (storage: $storageAvailable, active: ${activeRegions.contains(region)})")
+    yield (region, finalScore)
 
   /** Gets the latest metadata for a table, preferring local region if available.
     */

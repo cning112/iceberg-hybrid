@@ -22,6 +22,6 @@ object Region:
     def displayName: String = region._2
 
   // Common regions for convenience
-  val UsEast1: (String, String) = Region("us-east-1", "US East (N. Virginia)")
-  val EuWest1: (String, String) = Region("eu-west-1", "Europe (Ireland)")
-  val ApNortheast1: (String, String) = Region("ap-northeast-1", "Asia Pacific (Tokyo)")
+  val UsEast1: Region = Region("us-east-1", "US East (N. Virginia)")
+  val EuWest1: Region = Region("eu-west-1", "Europe (Ireland)")
+  val ApNortheast1: Region = Region("ap-northeast-1", "Asia Pacific (Tokyo)")

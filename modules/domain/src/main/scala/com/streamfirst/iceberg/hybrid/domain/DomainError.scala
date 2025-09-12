@@ -24,6 +24,25 @@ object DomainError:
     val message = s"Region not available: ${region.id}"
     override val code = Some("REGION_NOT_AVAILABLE")
 
+  case class CatalogSyncFailed(tableId: TableId, underlying: CatalogError) extends SyncError:
+    override val code = Some("CATALOG_SYNC_FAILED")
+    val message =
+      s"Catalog sync failed for table ${tableId.fullyQualifiedName}: ${underlying.message}"
+
+  case class StorageSyncFailed(region: Region, underlying: StorageError) extends SyncError:
+    override val code = Some("STORAGE_SYNC_FAILED")
+    val message = s"Storage sync failed for region ${region.id}: ${underlying.message}"
+
+  case class DataReplicationFailed(
+    tableId: TableId,
+    sourceRegion: Region,
+    targetRegion: Region,
+    reason: String)
+      extends SyncError:
+    override val code = Some("DATA_REPLICATION_FAILED")
+    val message =
+      s"Data replication failed for table ${tableId.fullyQualifiedName} from ${sourceRegion.id} to ${targetRegion.id}: $reason"
+
   /** Storage-related errors
     */
   sealed trait StorageError extends DomainError

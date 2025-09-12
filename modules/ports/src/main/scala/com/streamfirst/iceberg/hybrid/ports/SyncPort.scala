@@ -1,8 +1,15 @@
 package com.streamfirst.iceberg.hybrid.ports
 
-import com.streamfirst.iceberg.hybrid.domain.*
 import com.streamfirst.iceberg.hybrid.domain.DomainError.SyncError
-import zio.{IO, ZIO}
+import com.streamfirst.iceberg.hybrid.domain.{
+  EventId,
+  Region,
+  StoragePath,
+  SyncEvent,
+  TableId,
+  TableMetadata
+}
+import zio.{ IO, ZIO }
 
 /** Port for managing inter-region synchronization events. Coordinates the replication of metadata
   * and data between geographic regions using ZIO effects for type-safe error handling and

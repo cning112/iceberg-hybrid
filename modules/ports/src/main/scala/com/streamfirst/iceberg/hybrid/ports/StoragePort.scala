@@ -1,9 +1,9 @@
 package com.streamfirst.iceberg.hybrid.ports
 
-import com.streamfirst.iceberg.hybrid.domain.*
 import com.streamfirst.iceberg.hybrid.domain.DomainError.StorageError
-import zio.{IO, ZIO}
+import com.streamfirst.iceberg.hybrid.domain.{ Region, StorageLocation, StoragePath }
 import zio.stream.ZStream
+import zio.{ IO, ZIO }
 
 /** Port for file operations across regional storage systems. Abstracts different storage backends
   * (S3, MinIO, HDFS, etc.) behind a uniform interface using ZIO effects.

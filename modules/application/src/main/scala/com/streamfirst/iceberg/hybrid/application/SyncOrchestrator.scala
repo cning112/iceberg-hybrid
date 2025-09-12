@@ -1,8 +1,15 @@
 package com.streamfirst.iceberg.hybrid.application
 
-import com.streamfirst.iceberg.hybrid.domain.*
-import com.streamfirst.iceberg.hybrid.domain.DomainError.*
-import com.streamfirst.iceberg.hybrid.ports.*
+import com.streamfirst.iceberg.hybrid.domain.DomainError.{ CatalogError, StorageError, SyncError }
+import com.streamfirst.iceberg.hybrid.domain.{
+  DomainError,
+  Region,
+  StoragePath,
+  SyncEvent,
+  TableId
+}
+import com.streamfirst.iceberg.hybrid.ports.{ CatalogPort, RegistryPort, StoragePort, SyncPort }
+import zio.{ IO, ZIO, ZLayer }
 
 /** Orchestrates synchronization operations between regions. Processes sync events and coordinates
   * data/metadata replication using ZIO effects for composable, type-safe operations.
@@ -43,102 +50,6 @@ final case class SyncOrchestrator(
         else ZIO.logWarning(s"Failed to process sync event ${event.eventId}")
     yield success
 
-  /** Processes metadata synchronization by fetching and storing metadata locally.
-    */
-  private def processMetadataSync(event: SyncEvent): IO[SyncError, Boolean] =
-    for
-      _ <- ZIO.logDebug(
-        s"Processing metadata sync for table ${event.tableId} to region ${event.targetRegion.id}")
-      metadataOpt <- catalogPort
-        .getMetadata(event.tableId, event.commitId)
-        .mapError(catalogErrorToSyncError)
-      metadata <- ZIO
-        .fromOption(metadataOpt)
-        .orElseFail(DomainError.SyncEventNotFound(event.eventId))
-
-      // Register table location in target region if not already present
-      existingPath <- registryPort
-        .getTableDataPath(event.tableId, event.targetRegion)
-        .mapError(storageErrorToSyncError)
-      _ <- existingPath match
-        case Some(_) => ZIO.unit
-        case None =>
-          val dataPath = generateTableDataPath(event.tableId)
-          registryPort
-            .registerTableLocation(event.tableId, event.targetRegion, dataPath)
-            .mapError(storageErrorToSyncError) *>
-            ZIO.logDebug(
-              s"Registered table location for ${event.tableId} in region ${event.targetRegion.id}")
-    yield true
-
-  /** Generates a standard data path for table data in a region.
-    */
-  private def generateTableDataPath(tableId: TableId): String =
-    s"tables/${tableId.namespace}/${tableId.name}"
-
-  /** Processes data synchronization by copying files between regions.
-    */
-  private def processDataSync(event: SyncEvent): IO[SyncError, Boolean] =
-    for
-      _ <- ZIO.logDebug(
-        s"Processing data sync for table ${event.tableId} from ${event.sourceRegion.id} to ${event.targetRegion.id}")
-
-      // Get storage locations for source and target regions
-      sourceStorage <- storagePort
-        .getStorageLocation(event.sourceRegion)
-        .mapError(storageErrorToSyncError)
-      targetStorage <- storagePort
-        .getStorageLocation(event.targetRegion)
-        .mapError(storageErrorToSyncError)
-
-      // Get the table metadata to know which files to copy
-      metadataOpt <- catalogPort
-        .getMetadata(event.tableId, event.commitId)
-        .mapError(catalogErrorToSyncError)
-      metadata <- ZIO
-        .fromOption(metadataOpt)
-        .orElseFail(DomainError.SyncEventNotFound(event.eventId))
-
-      targetBasePath <- registryPort
-        .getTableDataPath(event.tableId, event.targetRegion)
-        .mapError(storageErrorToSyncError)
-        .someOrFail(DomainError.RegionNotAvailable(event.targetRegion))
-
-      // Copy each data file in parallel
-      copyResults <- ZIO.foreachPar(metadata.dataFiles) { dataFile =>
-        val targetPath = StoragePath(s"$targetBasePath/${dataFile.fileName}")
-
-        storagePort
-          .fileExists(targetStorage, targetPath)
-          .flatMap { exists =>
-            if !exists then
-              storagePort.copyFile(sourceStorage, dataFile, targetStorage, targetPath) *>
-                ZIO.logDebug(s"Copied file $dataFile to $targetPath") *>
-                ZIO.succeed(1)
-            else ZIO.succeed(0)
-          }
-          .mapError(storageErrorToSyncError)
-      }
-
-      copiedFiles = copyResults.sum
-      _ <- ZIO.logInfo(
-        s"Copied $copiedFiles files for table ${event.tableId} from ${event.sourceRegion.id} to ${event.targetRegion.id}")
-    yield true
-
-  // Error mapping utilities
-  private def catalogErrorToSyncError(error: CatalogError): SyncError =
-    error match
-      case DomainError.TableNotFound(tableId) =>
-        DomainError.SyncEventNotFound(EventId.generate("table-not-found"))
-      case _ =>
-        DomainError.RegionNotAvailable(Region("unknown", "Unknown Region"))
-
-  /** Processes commit completion notification.
-    */
-  private def processCommitCompleted(event: SyncEvent): IO[SyncError, Boolean] =
-    ZIO.logDebug(s"Processing commit completed notification for ${event.eventId}") *>
-      ZIO.succeed(true)
-
   /** Retries all failed events for a region.
     */
   def retryFailedEvents(region: Region): IO[SyncError, Int] =
@@ -151,18 +62,109 @@ final case class SyncOrchestrator(
           .as(count + 1)
           .tap(_ => ZIO.logDebug(s"Retried failed event ${event.eventId}"))
           .catchAll(error =>
-            ZIO.logError(s"Failed to retry event ${event.eventId}: $error") *>
-              ZIO.succeed(count))
+            ZIO.logError(s"Failed to retry event ${event.eventId}: $error").as(count))
       }
       _ <- ZIO.logInfo(s"Retried $retriedCount failed events for region ${region.id}")
     yield retriedCount
 
-  private def storageErrorToSyncError(error: StorageError): SyncError =
-    error match
-      case DomainError.StorageLocationNotFound(region) =>
-        DomainError.RegionNotAvailable(region)
-      case _ =>
-        DomainError.RegionNotAvailable(Region("unknown", "Unknown Region"))
+  /** Generates a standard data path for table data in a region.
+    */
+  private def generateTableDataPath(tableId: TableId): String =
+    s"tables/${tableId.namespace}/${tableId.name}"
+
+  /** Processes metadata synchronization by fetching and storing metadata locally.
+    */
+  private def processMetadataSync(event: SyncEvent): IO[SyncError, Boolean] =
+    for
+      _ <- ZIO.logDebug(
+        s"Processing metadata sync for table ${event.tableId} to region ${event.targetRegion.id}")
+      metadataOpt <- catalogPort
+        .getMetadata(event.tableId, event.commitId)
+        .mapError(catalogErrorToSyncError(event.tableId))
+      metadata <- ZIO
+        .fromOption(metadataOpt)
+        .orElseFail(DomainError.SyncEventNotFound(event.eventId))
+
+      // Register table location in target region if not already present
+      existingPath <- registryPort
+        .getTableDataPath(event.tableId, event.targetRegion)
+        .mapError(storageErrorToSyncError(event.targetRegion))
+      _ <- existingPath match
+        case Some(_) => ZIO.unit
+        case None =>
+          val dataPath = generateTableDataPath(event.tableId)
+          registryPort
+            .registerTableLocation(event.tableId, event.targetRegion, dataPath)
+            .mapError(storageErrorToSyncError(event.targetRegion)) *>
+            ZIO.logDebug(
+              s"Registered table location for ${event.tableId} in region ${event.targetRegion.id}")
+    yield true
+
+  /** Processes data synchronization by copying files between regions.
+    */
+  private def processDataSync(event: SyncEvent): IO[SyncError, Boolean] =
+    for
+      _ <- ZIO.logDebug(
+        s"Processing data sync for table ${event.tableId} from ${event.sourceRegion.id} to ${event.targetRegion.id}")
+
+      // Get storage locations for source and target regions
+      sourceStorage <- storagePort
+        .getStorageLocation(event.sourceRegion)
+        .mapError(storageErrorToSyncError(event.sourceRegion))
+      targetStorage <- storagePort
+        .getStorageLocation(event.targetRegion)
+        .mapError(storageErrorToSyncError(event.targetRegion))
+
+      // Get the table metadata to know which files to copy
+      metadataOpt <- catalogPort
+        .getMetadata(event.tableId, event.commitId)
+        .mapError(catalogErrorToSyncError(event.tableId))
+      metadata <- ZIO
+        .fromOption(metadataOpt)
+        .orElseFail(DomainError.SyncEventNotFound(event.eventId))
+
+      targetBasePath <- registryPort
+        .getTableDataPath(event.tableId, event.targetRegion)
+        .mapError(storageErrorToSyncError(event.targetRegion))
+        .someOrFail(DomainError.RegionNotAvailable(event.targetRegion))
+
+      // Copy each data file in parallel
+      copyResults <- ZIO.foreachPar(metadata.dataFiles) { dataFile =>
+        val targetPath = StoragePath(s"$targetBasePath/${dataFile.fileName}")
+
+        storagePort
+          .fileExists(targetStorage, targetPath)
+          .flatMap { exists =>
+            if !exists then
+              (storagePort.copyFile(sourceStorage, dataFile, targetStorage, targetPath) *>
+                ZIO.logDebug(s"Copied file $dataFile to $targetPath")).as(1)
+            else ZIO.succeed(0)
+          }
+          .mapError(error =>
+            DomainError.DataReplicationFailed(
+              event.tableId,
+              event.sourceRegion,
+              event.targetRegion,
+              error.message
+            ))
+      }
+
+      copiedFiles = copyResults.sum
+      _ <- ZIO.logInfo(
+        s"Copied $copiedFiles files for table ${event.tableId} from ${event.sourceRegion.id} to ${event.targetRegion.id}")
+    yield true
+
+  // Error mapping utilities
+  private def catalogErrorToSyncError(tableId: TableId)(error: CatalogError): SyncError =
+    DomainError.CatalogSyncFailed(tableId, error)
+
+  /** Processes commit completion notification.
+    */
+  private def processCommitCompleted(event: SyncEvent): IO[SyncError, Boolean] =
+    ZIO.logDebug(s"Processing commit completed notification for ${event.eventId}").as(true)
+
+  private def storageErrorToSyncError(region: Region)(error: StorageError): SyncError =
+    DomainError.StorageSyncFailed(region, error)
 
 object SyncOrchestrator:
   /** Creates a ZLayer for dependency injection

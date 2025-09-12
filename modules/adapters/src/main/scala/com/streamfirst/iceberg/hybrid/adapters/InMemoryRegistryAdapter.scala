@@ -1,84 +1,72 @@
 package com.streamfirst.iceberg.hybrid.adapters
 
-import com.streamfirst.iceberg.hybrid.domain.*
-import com.streamfirst.iceberg.hybrid.domain.DomainError.*
-import com.streamfirst.iceberg.hybrid.ports.{RegionStatus, RegistryPort}
-import zio.logging.*
-
-import scala.collection.concurrent.TrieMap
+import com.streamfirst.iceberg.hybrid.domain.DomainError.{ ConfigurationError, StorageError }
+import com.streamfirst.iceberg.hybrid.domain.{ Region, StorageLocation, TableId }
+import com.streamfirst.iceberg.hybrid.ports.{ RegionStatus, RegistryPort }
+import zio.{ IO, Ref, ZIO, ZLayer }
 
 /** In-memory implementation of RegistryPort for testing and development. NOT suitable for
-  * production use - data is lost on restart.
+  * production use - data is lost on restart. Uses ZIO Ref for thread-safe atomic operations.
   */
-final case class InMemoryRegistryAdapter() extends RegistryPort:
-  val tableLocations = TrieMap[(TableId, Region), String]()
-  val regionStorage = TrieMap[Region, StorageLocation]()
-  val regionStatuses = TrieMap[Region, RegionStatus]()
+final case class InMemoryRegistryAdapter(
+  tableLocations: Ref[Map[(TableId, Region), String]],
+  regionStorage: Ref[Map[Region, StorageLocation]],
+  regionStatuses: Ref[Map[Region, RegionStatus]]
+) extends RegistryPort:
 
   override def getTableDataPath(
     tableId: TableId,
     region: Region): IO[StorageError, Option[String]] =
-    ZIO.succeed {
-      tableLocations.get((tableId, region))
-    }
+    tableLocations.get.map(_.get((tableId, region)))
 
   override def registerTableLocation(
     tableId: TableId,
     region: Region,
     dataPath: String): IO[StorageError, Unit] =
-    ZIO
-      .succeed {
-        tableLocations.put((tableId, region), dataPath)
-        ()
-      }
+    tableLocations
+      .update(_.updated((tableId, region), dataPath))
       .tap(_ =>
         ZIO.logDebug(s"Registered table location: $tableId in region ${region.id} at $dataPath"))
 
   override def getTableRegions(tableId: TableId): IO[StorageError, List[Region]] =
-    ZIO.succeed {
-      tableLocations.keys
+    tableLocations.get.map { locations =>
+      locations.keys
         .filter(_._1 == tableId)
         .map(_._2)
         .toList
     }
 
-  override def getActiveRegions(): IO[ConfigurationError, List[Region]] =
-    ZIO.succeed {
-      regionStatuses
+  override def getActiveRegions: IO[ConfigurationError, List[Region]] =
+    regionStatuses.get.map { statuses =>
+      statuses
         .filter(_._2 == RegionStatus.Active)
         .keys
         .toList
+        .distinct
     }
 
   override def registerRegion(
     region: Region,
     storageLocation: StorageLocation): IO[ConfigurationError, Unit] =
-    ZIO
-      .succeed {
-        regionStorage.put(region, storageLocation)
-        regionStatuses.put(region, RegionStatus.Active)
-        ()
-      }
-      .tap(_ => ZIO.logInfo(s"Registered region ${region.id} with storage"))
+    for
+      _ <- regionStorage.update(_ + (region -> storageLocation))
+      _ <- regionStatuses.update(_ + (region -> RegionStatus.Active))
+      _ <- ZIO.logInfo(s"Registered region ${region.id} with storage")
+    yield ()
 
   override def getRegionStorage(region: Region): IO[StorageError, Option[StorageLocation]] =
-    ZIO.succeed {
-      regionStorage.get(region)
-    }
+    regionStorage.get.map(_.get(region))
 
   override def updateRegionStatus(
     region: Region,
     status: RegionStatus): IO[ConfigurationError, Unit] =
-    ZIO
-      .succeed {
-        regionStatuses.put(region, status)
-        ()
-      }
+    regionStatuses
+      .update(_ + (region -> status))
       .tap(_ => ZIO.logInfo(s"Updated region ${region.id} status to $status"))
 
   override def getRegionTables(region: Region): IO[StorageError, List[TableId]] =
-    ZIO.succeed {
-      tableLocations.keys
+    tableLocations.get.map { locations =>
+      locations.keys
         .filter(_._2 == region)
         .map(_._1)
         .toList
@@ -86,27 +74,54 @@ final case class InMemoryRegistryAdapter() extends RegistryPort:
 
 object InMemoryRegistryAdapter:
   def live: ZLayer[Any, Nothing, RegistryPort] =
-    ZLayer.succeed(InMemoryRegistryAdapter())
+    ZLayer.fromZIO {
+      for
+        tableLocations <- Ref.make(Map.empty[(TableId, Region), String])
+        regionStorage <- Ref.make(Map.empty[Region, StorageLocation])
+        regionStatuses <- Ref.make(
+          Map
+            .empty[Region, RegionStatus])
+      yield InMemoryRegistryAdapter(tableLocations, regionStorage, regionStatuses)
+    }
 
   def withSampleData: ZLayer[Any, Nothing, RegistryPort] =
     ZLayer.fromZIO {
-      val adapter = InMemoryRegistryAdapter()
+      for
+        tableLocations <- Ref.make(Map.empty[(TableId, Region), String])
+        regionStorage <- Ref.make(Map.empty[Region, StorageLocation])
+        regionStatuses <- Ref.make(
+          Map
+            .empty[Region, RegionStatus])
+        adapter =
+          InMemoryRegistryAdapter(tableLocations, regionStorage, regionStatuses)
 
-      // Add some sample regions synchronously (for simplicity in test setup)
-      val usEast1Storage =
-        StorageLocation.s3(Region.UsEast1, "iceberg-data-us-east-1", Some("tables"))
-      val euWest1Storage =
-        StorageLocation.s3(Region.EuWest1, "iceberg-data-eu-west-1", Some("tables"))
+        // Add sample data using atomic operations
+        usEast1Storage = StorageLocation
+          .s3(Region.UsEast1, "iceberg-data-us-east-1", Some("tables"))
+        euWest1Storage = StorageLocation
+          .s3(Region.EuWest1, "iceberg-data-eu-west-1", Some("tables"))
 
-      adapter.regionStorage.put(Region.UsEast1, usEast1Storage)
-      adapter.regionStorage.put(Region.EuWest1, euWest1Storage)
-      adapter.regionStatuses.put(Region.UsEast1, RegionStatus.Active)
-      adapter.regionStatuses.put(Region.EuWest1, RegionStatus.Active)
+        _ <- regionStorage.update(
+          _ ++ Map(
+            Region.UsEast1 -> usEast1Storage,
+            Region.EuWest1 -> euWest1Storage
+          ))
+        _ <- regionStatuses.update(
+          _ ++ Map(
+            Region.UsEast1 -> RegionStatus.Active,
+            Region.EuWest1 -> RegionStatus.Active
+          ))
 
-      // Register some sample table locations
-      val sampleTable = TableId("analytics", "user_events")
-      adapter.tableLocations.put((sampleTable, Region.UsEast1), "tables/analytics/user_events")
-      adapter.tableLocations.put((sampleTable, Region.EuWest1), "tables/analytics/user_events")
+        // Register sample table locations
+        sampleTable = TableId("analytics", "user_events")
+        samplePath =
+          "tables/analytics/user_events"
+        _ <- tableLocations.update(
+          _ ++ Map(
+            (sampleTable, Region.UsEast1) -> samplePath,
+            (sampleTable, Region.EuWest1) -> samplePath
+          ))
 
-      ZIO.succeed(adapter).tap(_ => ZIO.logInfo("Created registry adapter with sample data"))
+        _ <- ZIO.logInfo("Created registry adapter with sample data")
+      yield adapter
     }

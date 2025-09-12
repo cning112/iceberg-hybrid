@@ -1,8 +1,8 @@
 package com.streamfirst.iceberg.hybrid.ports
 
-import com.streamfirst.iceberg.hybrid.domain.*
-import com.streamfirst.iceberg.hybrid.domain.DomainError.{ConfigurationError, StorageError}
-import zio.{IO, ZIO}
+import com.streamfirst.iceberg.hybrid.domain.DomainError.{ ConfigurationError, StorageError }
+import com.streamfirst.iceberg.hybrid.domain.{ Region, StorageLocation, TableId }
+import zio.{ IO, ZIO }
 
 /** Port for managing the global registry of storage locations and regional configurations. Tracks
   * where table data is stored across different regions.
