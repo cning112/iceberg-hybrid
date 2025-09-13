@@ -31,7 +31,7 @@ final case class SyncOrchestrator(
           progressRef.updateAndGet(_.withEventProcessed(success)).flatMap { progress =>
             if progress.processedEvents % 10 == 0 || progress.processedEvents == progress.totalEvents then
               ZIO.logInfo(s"Progress: ${progress.processedEvents}/${progress.totalEvents} events processed " +
-                s"(${progress.percentComplete.formatted("%.1f")}% complete) for region ${region.id}")
+                f"(${progress.percentComplete}%.1f%% complete) for region ${region.id}")
             else ZIO.unit
           }
         }

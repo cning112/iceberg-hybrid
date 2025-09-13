@@ -37,15 +37,16 @@ final case class WriteCoordinator(
       metadata: TableMetadata,
       sourceRegion: Region
   ): IO[SyncError | CatalogError, WriteJobId] =
+    val writeJob = WriteJob.create(tableId, sourceRegion)
+    val request = CommitRequest.create(tableId, sourceRegion, metadata)
+    
     for
       // Create and track the write job
-      writeJob = WriteJob.create(tableId, sourceRegion)
       _ <- writeJobsRef.update(_.updated(writeJob.writeJobId, writeJob))
       _ <- ZIO.logInfo(s"Created write job ${writeJob.writeJobId} for table $tableId from region ${sourceRegion.id}")
 
       // Step 1: Request commit approval from global gate
       _ <- updateWriteJobStatus(writeJob.writeJobId, WriteJobStatus.RequestingApproval)
-      request = CommitRequest.create(tableId, sourceRegion, metadata)
       approval <- commitGatePort.requestCommitApproval(request)
       targetRegions = approval.approvedRegions.filter(_ != sourceRegion)
       _ <- updateWriteJobTargetRegions(writeJob.writeJobId, targetRegions)

@@ -1,7 +1,7 @@
 package com.streamfirst.iceberg.hybrid.adapters
 
 import com.streamfirst.iceberg.hybrid.domain.DomainError.{ConfigurationError, StorageError}
-import com.streamfirst.iceberg.hybrid.domain.{Region, StorageLocation, TableId}
+import com.streamfirst.iceberg.hybrid.domain.{BatchRegistrationResult, Region, StorageLocation, TableId}
 import com.streamfirst.iceberg.hybrid.ports.{RegionStatus, RegistryPort}
 import zio.{IO, Ref, ZIO, ZLayer}
 
@@ -57,6 +57,45 @@ final case class InMemoryRegistryAdapter(
 
   override def getRegionTables(region: Region): IO[StorageError, List[TableId]] =
     tableLocations.get.map { locations => locations.keys.filter(_._2 == region).map(_._1).toList }
+
+  override def registerTableLocationsBatch(
+      registrations: List[(TableId, Region, String)]
+  ): IO[StorageError, BatchRegistrationResult] =
+    ZIO.attempt {
+      val updates = registrations.map { case (tableId, region, path) => 
+        (tableId, region) -> path
+      }.toMap
+      BatchRegistrationResult.success(registrations.size)
+    }.flatMap { result =>
+      tableLocations.update { current =>
+        registrations.foldLeft(current) { case (acc, (tableId, region, path)) =>
+          acc.updated((tableId, region), path)
+        }
+      }.as(result)
+    }.orElse(ZIO.succeed(BatchRegistrationResult(registrations.size, 0, registrations.size)))
+
+  override def getTableDataPathsBatch(
+      requests: List[(TableId, Region)]
+  ): IO[StorageError, Map[(TableId, Region), Option[String]]] =
+    tableLocations.get.map { locations =>
+      requests.map { request =>
+        request -> locations.get(request)
+      }.toMap
+    }
+
+  override def registerTableInRegionsBatch(
+      tableId: TableId,
+      regionPaths: List[(Region, String)]
+  ): IO[StorageError, BatchRegistrationResult] =
+    ZIO.attempt {
+      BatchRegistrationResult.success(regionPaths.size)
+    }.flatMap { result =>
+      tableLocations.update { current =>
+        regionPaths.foldLeft(current) { case (acc, (region, path)) =>
+          acc.updated((tableId, region), path)
+        }
+      }.as(result)
+    }.orElse(ZIO.succeed(BatchRegistrationResult(regionPaths.size, 0, regionPaths.size)))
 
 object InMemoryRegistryAdapter:
   def live: ZLayer[Any, Nothing, RegistryPort] =
