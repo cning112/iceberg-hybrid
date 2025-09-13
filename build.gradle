@@ -1,98 +1,98 @@
 plugins {
-    id 'java'
-    id 'scala'
-    id 'com.diffplug.spotless' version '7.2.1'
+	id 'java'
+	id 'scala'
+	id 'com.diffplug.spotless' version '7.2.1'
 }
 
 repositories {
-    mavenCentral()
+	mavenCentral()
 }
 
 spotless {
-    java {
-        googleJavaFormat('1.28.0').aosp()
-    }
-    scala {
-        scalafmt()
-    }
-    groovyGradle {
-        target '*.gradle'
-        greclipse()  // Eclipse Groovy formatter
-    }
+	java {
+		googleJavaFormat('1.28.0').aosp()
+	}
+	scala {
+		scalafmt()
+	}
+	groovyGradle {
+		target '*.gradle'
+		greclipse()  // Eclipse Groovy formatter
+	}
 }
 
 allprojects {
-    group = 'com.streamfirst.iceberg.hybrid'
-    version = '0.1.0'
+	group = 'com.streamfirst.iceberg.hybrid'
+	version = '0.1.0'
 }
 
 subprojects {
-    java {
-        toolchain {
-            languageVersion = JavaLanguageVersion.of(21)
-        }
-    }
+	java {
+		toolchain {
+			languageVersion = JavaLanguageVersion.of(21)
+		}
+	}
 
-    repositories {
-        mavenCentral()
-    }
+	repositories {
+		mavenCentral()
+	}
 
-    test {
-        useJUnitPlatform()
-    }
+	test {
+		useJUnitPlatform()
+	}
 }
 
 // Configure Scala modules
 configure(subprojects.findAll { it.path.startsWith(':modules:') }) {
-    apply plugin: 'scala'
+	apply plugin: 'scala'
 
-    scala {
-        zincVersion = '1.10.8'
-    }
+	scala {
+		zincVersion = '1.10.8'
+	}
 
-    dependencies {
-        implementation 'org.scala-lang:scala3-library_3:3.3.6'
+	dependencies {
+		implementation 'org.scala-lang:scala3-library_3:3.3.6'
 
-        // ZIO dependencies
-        implementation 'dev.zio:zio_3:2.1.21'
-        implementation 'dev.zio:zio-streams_3:2.1.21'
-        implementation 'dev.zio:zio-logging_3:2.5.1'
-        implementation 'dev.zio:zio-config_3:4.0.5'
-        implementation 'dev.zio:zio-json_3:0.7.44'
+		// ZIO dependencies
+		implementation 'dev.zio:zio_3:2.1.21'
+		implementation 'dev.zio:zio-streams_3:2.1.21'
+		implementation 'dev.zio:zio-logging_3:2.5.1'
+		implementation 'dev.zio:zio-config_3:4.0.5'
+		implementation 'dev.zio:zio-json_3:0.7.44'
 
-        // Test dependencies
-        testImplementation 'dev.zio:zio-test_3:2.1.21'
-        testImplementation 'dev.zio:zio-test-sbt_3:2.1.21'
-        testImplementation 'dev.zio:zio-test-junit_3:2.1.21'
-    }
+		// Test dependencies
+		testImplementation 'dev.zio:zio-test_3:2.1.21'
+		testImplementation 'dev.zio:zio-test-sbt_3:2.1.21'
+		testImplementation 'dev.zio:zio-test-junit_3:2.1.21'
+	}
 
-    tasks.withType(ScalaCompile).tap {
-        configureEach {
-            scalaCompileOptions.additionalParameters = [
-                    '-feature',
-                    '-deprecation',
-                    '-unchecked',
-                    '-Wunused:all',
-                    '-Wunused:imports',
-                    '-source:future'
-            ]
-        }
-    }
+	tasks.withType(ScalaCompile).tap {
+		configureEach {
+			scalaCompileOptions.additionalParameters = [
+				'-feature',
+				'-deprecation',
+				'-unchecked',
+				'-Wunused:all',
+				'-Wunused:imports',
+				'-source:future'
+			]
+		}
+	}
 }
 
 // Configure legacy Java modules
 configure(subprojects.findAll { it.path.startsWith(':legacy-java:') || it.path.startsWith(':legacy:') }) {
-    apply plugin: 'java'
+	apply plugin: 'java'
 
-    dependencies {
-        testImplementation 'org.junit.jupiter:junit-jupiter:5.11.0'
-        testImplementation 'org.assertj:assertj-core:3.26.3'
-    }
+	dependencies {
+		testImplementation 'org.junit.jupiter:junit-jupiter:5.11.0'
+		testImplementation 'org.assertj:assertj-core:3.26.3'
+	}
 
-    // Handle duplicate files in JAR creation
-    tasks.withType(Jar).tap {
-        configureEach {
-            duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-        }
-    }
+	// Handle duplicate files in JAR creation
+	tasks.withType(Jar).tap {
+		configureEach {
+			duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+		}
+	}
 }

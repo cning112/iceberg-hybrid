@@ -4,7 +4,7 @@ import com.streamfirst.iceberg.hybrid.adapters.InMemoryRegistryAdapter
 import com.streamfirst.iceberg.hybrid.application.ReadRouter
 import com.streamfirst.iceberg.hybrid.domain.*
 import com.streamfirst.iceberg.hybrid.domain.DomainError.*
-import com.streamfirst.iceberg.hybrid.ports.{CatalogPort, RegistryPort, StoragePort}
+import com.streamfirst.iceberg.hybrid.ports.{CatalogPort, RegistryPort, StoragePort, FileMetadata}
 import zio.*
 import zio.stream.ZStream
 import zio.test.*
@@ -212,6 +212,31 @@ object SimpleE2ESpec extends ZIOSpecDefault:
       val results = requests.flatMap { key => commits.get(key).map(key -> _) }.toMap
       ZIO.succeed(results)
 
+    // Missing async/streaming methods
+    def listTablesPaginated(namespace: String, pagination: PaginationRequest): IO[CatalogError, PaginatedResult[TableId]] =
+      val allTables = tables.keys.filter(_.namespace == namespace).toList
+      val startIndex = pagination.continuationToken.map(_.toInt).getOrElse(0)
+      val endIndex = math.min(startIndex + pagination.pageSize, allTables.size)
+      val items = allTables.slice(startIndex, endIndex)
+      val hasMore = endIndex < allTables.size
+      val nextToken = if (hasMore) Some(endIndex.toString) else None
+      ZIO.succeed(PaginatedResult(items, nextToken, hasMore))
+
+    def listTablesStream(namespace: String): ZStream[Any, CatalogError, TableId] =
+      ZStream.fromIterable(tables.keys.filter(_.namespace == namespace))
+
+    def getCommitHistoryPaginated(tableId: TableId, pagination: PaginationRequest): IO[CatalogError, PaginatedResult[CommitId]] =
+      val allCommits = commits.keys.filter(_._1 == tableId).map(_._2).toList
+      val startIndex = pagination.continuationToken.map(_.toInt).getOrElse(0)
+      val endIndex = math.min(startIndex + pagination.pageSize, allCommits.size)
+      val items = allCommits.slice(startIndex, endIndex)
+      val hasMore = endIndex < allCommits.size
+      val nextToken = if (hasMore) Some(endIndex.toString) else None
+      ZIO.succeed(PaginatedResult(items, nextToken, hasMore))
+
+    def getCommitHistoryStream(tableId: TableId): ZStream[Any, CatalogError, CommitId] =
+      ZStream.fromIterable(commits.keys.filter(_._1 == tableId).map(_._2))
+
   /** Simple storage implementation with failure simulation */
   class TestStorage extends StoragePort:
     private val locations = Map(
@@ -272,5 +297,27 @@ object SimpleE2ESpec extends ZIOSpecDefault:
     def getFileMetadata(
         location: StorageLocation,
         path: StoragePath
-    ): IO[StorageError, com.streamfirst.iceberg.hybrid.ports.FileMetadata] =
+    ): IO[StorageError, FileMetadata] =
       ZIO.fail(DomainError.FileNotFound(path))
+
+    // Missing async/streaming methods
+    def copyFileAsync(
+        sourceLocation: StorageLocation,
+        sourcePath: StoragePath,
+        targetLocation: StorageLocation,
+        targetPath: StoragePath
+    ): IO[StorageError, JobId] =
+      ZIO.succeed(JobId.generate())
+
+    def getCopyJobStatus(jobId: JobId): IO[StorageError, Option[CopyJob]] =
+      ZIO.succeed(None)
+
+    def cancelCopyJob(jobId: JobId): IO[StorageError, Boolean] =
+      ZIO.succeed(false)
+
+    def listFilesStream(
+        location: StorageLocation,
+        directory: StoragePath,
+        predicate: StoragePath => Boolean
+    ): ZStream[Any, StorageError, StoragePath] =
+      ZStream.empty

@@ -3,6 +3,7 @@ package com.streamfirst.iceberg.hybrid.ports
 import com.streamfirst.iceberg.hybrid.domain.*
 import com.streamfirst.iceberg.hybrid.domain.DomainError.CatalogError
 import zio.*
+import zio.stream.ZStream
 import zio.test.*
 
 object CatalogPortSpec extends ZIOSpecDefault:
@@ -50,6 +51,31 @@ object CatalogPortSpec extends ZIOSpecDefault:
         commits.get(key).map(key -> _)
       }.toMap
       ZIO.succeed(results)
+
+    // Missing async/streaming methods
+    def listTablesPaginated(namespace: String, pagination: PaginationRequest): IO[CatalogError, PaginatedResult[TableId]] =
+      val allTables = tables.keys.filter(_.namespace == namespace).toList
+      val startIndex = pagination.continuationToken.map(_.toInt).getOrElse(0)
+      val endIndex = math.min(startIndex + pagination.pageSize, allTables.size)
+      val items = allTables.slice(startIndex, endIndex)
+      val hasMore = endIndex < allTables.size
+      val nextToken = if (hasMore) Some(endIndex.toString) else None
+      ZIO.succeed(PaginatedResult(items, nextToken, hasMore))
+
+    def listTablesStream(namespace: String): ZStream[Any, CatalogError, TableId] =
+      ZStream.fromIterable(tables.keys.filter(_.namespace == namespace))
+
+    def getCommitHistoryPaginated(tableId: TableId, pagination: PaginationRequest): IO[CatalogError, PaginatedResult[CommitId]] =
+      val allCommits = commits.keys.filter(_._1 == tableId).map(_._2).toList
+      val startIndex = pagination.continuationToken.map(_.toInt).getOrElse(0)
+      val endIndex = math.min(startIndex + pagination.pageSize, allCommits.size)
+      val items = allCommits.slice(startIndex, endIndex)
+      val hasMore = endIndex < allCommits.size
+      val nextToken = if (hasMore) Some(endIndex.toString) else None
+      ZIO.succeed(PaginatedResult(items, nextToken, hasMore))
+
+    def getCommitHistoryStream(tableId: TableId): ZStream[Any, CatalogError, CommitId] =
+      ZStream.fromIterable(commits.keys.filter(_._1 == tableId).map(_._2))
 
   def spec = suite("CatalogPort")(
     test("should create and retrieve table metadata") {

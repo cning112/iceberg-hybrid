@@ -1,37 +1,37 @@
 pluginManagement {
-    repositories {
-        mavenCentral()
-        gradlePluginPortal()
-    }
+	repositories {
+		mavenCentral()
+		gradlePluginPortal()
+	}
 }
 
 rootProject.name = "iceberg-hybrid"
 
 include(
-        // New Scala 3 + ZIO modules
-        "modules:domain",
-        "modules:ports",
-        "modules:application",
-        "modules:adapters",
-        "modules:integration",
+		// New Scala 3 + ZIO modules
+		"modules:domain",
+		"modules:ports",
+		"modules:application",
+		"modules:adapters",
+		"modules:integration",
 
-        // Legacy Java modules for reference
-        "legacy-java:domain-java",
-        "legacy-java:ports-java",
-        "legacy-java:application-java",
-        "legacy-java:adapters-java",
-        "legacy-java:integration-java",
+		// Legacy Java modules for reference
+		"legacy-java:domain-java",
+		"legacy-java:ports-java",
+		"legacy-java:application-java",
+		"legacy-java:adapters-java",
+		"legacy-java:integration-java",
 
-        // Legacy java modules for replica-dr design
-        "legacy:modules:domain",
-        "legacy:modules:ports",
-        "legacy:modules:app",
-        "legacy:modules:adapters:catalog-nessie",
-        "legacy:modules:adapters:storage-s3",
-        "legacy:modules:adapters:inventory-s3",
-        "legacy:modules:adapters:infra-redis",
-        "legacy:modules:adapters:infra-kafka",
-        "legacy:modules:boot",
-        "legacy:qa:e2e",
-        "legacy:qa:perf-jmh"
-)
+		// Legacy java modules for replica-dr design
+		"legacy:modules:domain",
+		"legacy:modules:ports",
+		"legacy:modules:app",
+		"legacy:modules:adapters:catalog-nessie",
+		"legacy:modules:adapters:storage-s3",
+		"legacy:modules:adapters:inventory-s3",
+		"legacy:modules:adapters:infra-redis",
+		"legacy:modules:adapters:infra-kafka",
+		"legacy:modules:boot",
+		"legacy:qa:e2e",
+		"legacy:qa:perf-jmh"
+		)

@@ -2,7 +2,7 @@ package com.streamfirst.iceberg.hybrid.application
 
 import com.streamfirst.iceberg.hybrid.domain.*
 import com.streamfirst.iceberg.hybrid.domain.DomainError.*
-import com.streamfirst.iceberg.hybrid.ports.{CatalogPort, RegistryPort, StoragePort}
+import com.streamfirst.iceberg.hybrid.ports.{CatalogPort, RegistryPort, StoragePort, FileMetadata}
 import zio.*
 import zio.stream.ZStream
 import zio.test.*
@@ -38,6 +38,26 @@ object ReadRouterSpec extends ZIOSpecDefault:
     
     def getMetadataBatch(requests: List[(TableId, CommitId)]): IO[CatalogError, Map[(TableId, CommitId), TableMetadata]] =
       ZIO.succeed(Map.empty)
+    
+    def listTablesPaginated(namespace: String, pagination: PaginationRequest): IO[CatalogError, PaginatedResult[TableId]] =
+      ZIO.succeed(PaginatedResult(
+        items = metadata.keys.filter(_.namespace == namespace).toList.take(pagination.pageSize),
+        continuationToken = None,
+        hasMore = false
+      ))
+    
+    def listTablesStream(namespace: String): ZStream[Any, CatalogError, TableId] =
+      ZStream.fromIterable(metadata.keys.filter(_.namespace == namespace))
+    
+    def getCommitHistoryPaginated(tableId: TableId, pagination: PaginationRequest): IO[CatalogError, PaginatedResult[CommitId]] =
+      ZIO.succeed(PaginatedResult(
+        items = List(CommitId.generate()),
+        continuationToken = None,
+        hasMore = false
+      ))
+    
+    def getCommitHistoryStream(tableId: TableId): ZStream[Any, CatalogError, CommitId] =
+      ZStream.succeed(CommitId.generate())
 
   class TestRegistryPort extends RegistryPort:
     private val tableRegions = scala.collection.mutable.Map[TableId, List[Region]]()
@@ -76,6 +96,33 @@ object ReadRouterSpec extends ZIOSpecDefault:
     
     def getRegionTables(region: Region): IO[StorageError, List[TableId]] =
       ZIO.succeed(tableRegions.filter(_._2.contains(region)).keys.toList)
+    
+    def registerTableLocationsBatch(registrations: List[(TableId, Region, String)]): IO[StorageError, BatchRegistrationResult] =
+      ZIO.succeed {
+        registrations.foreach { case (tableId, region, dataPath) =>
+          tableRegions.updateWith(tableId) {
+            case Some(regions) => Some(region :: regions)
+            case None => Some(List(region))
+          }
+          dataPaths.put((tableId, region), dataPath)
+        }
+        BatchRegistrationResult.success(registrations.size)
+      }
+    
+    def getTableDataPathsBatch(requests: List[(TableId, Region)]): IO[StorageError, Map[(TableId, Region), Option[String]]] =
+      ZIO.succeed(requests.map(req => req -> dataPaths.get(req)).toMap)
+    
+    def registerTableInRegionsBatch(tableId: TableId, regionPaths: List[(Region, String)]): IO[StorageError, BatchRegistrationResult] =
+      ZIO.succeed {
+        regionPaths.foreach { case (region, dataPath) =>
+          tableRegions.updateWith(tableId) {
+            case Some(regions) => Some(region :: regions)
+            case None => Some(List(region))
+          }
+          dataPaths.put((tableId, region), dataPath)
+        }
+        BatchRegistrationResult.success(regionPaths.size)
+      }
 
   class TestStoragePort extends StoragePort:
     private val storageLocations = Map(
@@ -98,7 +145,19 @@ object ReadRouterSpec extends ZIOSpecDefault:
     def deleteFile(location: StorageLocation, path: StoragePath): IO[StorageError, Unit] = ZIO.unit
     def fileExists(location: StorageLocation, path: StoragePath): IO[StorageError, Boolean] = ZIO.succeed(false)
     def listFiles(location: StorageLocation, directory: StoragePath, predicate: StoragePath => Boolean): IO[StorageError, List[StoragePath]] = ZIO.succeed(List.empty)
-    def getFileMetadata(location: StorageLocation, path: StoragePath): IO[StorageError, com.streamfirst.iceberg.hybrid.ports.FileMetadata] = ZIO.fail(DomainError.FileNotFound(path))
+    def getFileMetadata(location: StorageLocation, path: StoragePath): IO[StorageError, FileMetadata] = ZIO.fail(DomainError.FileNotFound(path))
+    
+    def copyFileAsync(sourceLocation: StorageLocation, sourcePath: StoragePath, targetLocation: StorageLocation, targetPath: StoragePath): IO[StorageError, JobId] =
+      ZIO.succeed(JobId.generate())
+    
+    def getCopyJobStatus(jobId: JobId): IO[StorageError, Option[CopyJob]] =
+      ZIO.succeed(None)
+    
+    def cancelCopyJob(jobId: JobId): IO[StorageError, Boolean] =
+      ZIO.succeed(true)
+    
+    def listFilesStream(location: StorageLocation, directory: StoragePath, predicate: StoragePath => Boolean): ZStream[Any, StorageError, StoragePath] =
+      ZStream.empty
 
   def spec = suite("ReadRouter")(
     test("should route read to preferred region when available") {
