@@ -1,7 +1,7 @@
 package com.streamfirst.iceberg.hybrid.ports
 
 import com.streamfirst.iceberg.hybrid.domain.DomainError.StorageError
-import com.streamfirst.iceberg.hybrid.domain.{Region, StorageLocation, StoragePath}
+import com.streamfirst.iceberg.hybrid.domain.{Region, StorageLocation, StoragePath, JobId, CopyJob}
 import zio.stream.ZStream
 import zio.{IO, ZIO}
 
@@ -32,12 +32,19 @@ trait StoragePort:
   /** Checks if a file exists at the specified path. */
   def fileExists(location: StorageLocation, path: StoragePath): IO[StorageError, Boolean]
 
-  /** Lists files matching the specified pattern in a directory. */
+  /** Lists files matching the specified pattern in a directory. Use with caution for large directories. */
   def listFiles(
       location: StorageLocation,
       directory: StoragePath,
       predicate: StoragePath => Boolean
   ): IO[StorageError, List[StoragePath]]
+
+  /** Streams files matching the specified pattern in a directory. Preferred for large directories. */
+  def listFilesStream(
+      location: StorageLocation,
+      directory: StoragePath,
+      predicate: StoragePath => Boolean
+  ): ZStream[Any, StorageError, StoragePath]
 
   /** Copies a file from source to target location. Handles cross-region copying. */
   def copyFile(
@@ -46,6 +53,20 @@ trait StoragePort:
       targetLocation: StorageLocation,
       targetPath: StoragePath
   ): IO[StorageError, Unit]
+
+  /** Starts an async copy operation and returns a job ID for tracking. */
+  def copyFileAsync(
+      sourceLocation: StorageLocation,
+      sourcePath: StoragePath,
+      targetLocation: StorageLocation,
+      targetPath: StoragePath
+  ): IO[StorageError, JobId]
+
+  /** Gets the status of an async copy job. */
+  def getCopyJobStatus(jobId: JobId): IO[StorageError, Option[CopyJob]]
+
+  /** Cancels an async copy job if it's still pending or in progress. */
+  def cancelCopyJob(jobId: JobId): IO[StorageError, Boolean]
 
   /** Deletes a file at the specified location. */
   def deleteFile(location: StorageLocation, path: StoragePath): IO[StorageError, Unit]
@@ -96,3 +117,26 @@ object StoragePort:
 
   def getStorageLocation(region: Region): ZIO[StoragePort, StorageError, StorageLocation] =
     ZIO.serviceWithZIO[StoragePort](_.getStorageLocation(region))
+
+  def copyFileAsync(
+      sourceLocation: StorageLocation,
+      sourcePath: StoragePath,
+      targetLocation: StorageLocation,
+      targetPath: StoragePath
+  ): ZIO[StoragePort, StorageError, JobId] =
+    ZIO.serviceWithZIO[StoragePort](
+      _.copyFileAsync(sourceLocation, sourcePath, targetLocation, targetPath)
+    )
+
+  def getCopyJobStatus(jobId: JobId): ZIO[StoragePort, StorageError, Option[CopyJob]] =
+    ZIO.serviceWithZIO[StoragePort](_.getCopyJobStatus(jobId))
+
+  def cancelCopyJob(jobId: JobId): ZIO[StoragePort, StorageError, Boolean] =
+    ZIO.serviceWithZIO[StoragePort](_.cancelCopyJob(jobId))
+
+  def listFilesStream(
+      location: StorageLocation,
+      directory: StoragePath,
+      predicate: StoragePath => Boolean
+  ): ZStream[StoragePort, StorageError, StoragePath] =
+    ZStream.serviceWithStream[StoragePort](_.listFilesStream(location, directory, predicate))

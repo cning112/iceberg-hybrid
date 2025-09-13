@@ -1,7 +1,7 @@
 package com.streamfirst.iceberg.hybrid.ports
 
 import com.streamfirst.iceberg.hybrid.domain.DomainError.{ConfigurationError, StorageError}
-import com.streamfirst.iceberg.hybrid.domain.{Region, StorageLocation, TableId}
+import com.streamfirst.iceberg.hybrid.domain.{BatchRegistrationResult, Region, StorageLocation, TableId}
 import zio.{IO, ZIO}
 
 /** Port for managing the global registry of storage locations and regional configurations. Tracks
@@ -36,6 +36,22 @@ trait RegistryPort:
   /** Gets all tables that have data in a specific region. */
   def getRegionTables(region: Region): IO[StorageError, List[TableId]]
 
+  /** Registers multiple table locations in batch for better performance. */
+  def registerTableLocationsBatch(
+      registrations: List[(TableId, Region, String)]
+  ): IO[StorageError, BatchRegistrationResult]
+
+  /** Gets table data paths for multiple tables in batch. */
+  def getTableDataPathsBatch(
+      requests: List[(TableId, Region)]
+  ): IO[StorageError, Map[(TableId, Region), Option[String]]]
+
+  /** Registers a table across multiple regions in batch. */
+  def registerTableInRegionsBatch(
+      tableId: TableId,
+      regionPaths: List[(Region, String)]
+  ): IO[StorageError, BatchRegistrationResult]
+
 enum RegionStatus:
   case Active
   case Inactive
@@ -65,3 +81,19 @@ object RegistryPort:
 
   def getRegionStorage(region: Region): ZIO[RegistryPort, StorageError, Option[StorageLocation]] =
     ZIO.serviceWithZIO[RegistryPort](_.getRegionStorage(region))
+
+  def registerTableLocationsBatch(
+      registrations: List[(TableId, Region, String)]
+  ): ZIO[RegistryPort, StorageError, BatchRegistrationResult] =
+    ZIO.serviceWithZIO[RegistryPort](_.registerTableLocationsBatch(registrations))
+
+  def getTableDataPathsBatch(
+      requests: List[(TableId, Region)]
+  ): ZIO[RegistryPort, StorageError, Map[(TableId, Region), Option[String]]] =
+    ZIO.serviceWithZIO[RegistryPort](_.getTableDataPathsBatch(requests))
+
+  def registerTableInRegionsBatch(
+      tableId: TableId,
+      regionPaths: List[(Region, String)]
+  ): ZIO[RegistryPort, StorageError, BatchRegistrationResult] =
+    ZIO.serviceWithZIO[RegistryPort](_.registerTableInRegionsBatch(tableId, regionPaths))

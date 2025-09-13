@@ -2,16 +2,22 @@ package com.streamfirst.iceberg.hybrid.ports
 
 import com.streamfirst.iceberg.hybrid.domain.*
 import com.streamfirst.iceberg.hybrid.domain.DomainError.SyncError
-import zio.{IO, ZIO}
+import zio.{Duration, IO, ZIO}
 
 /** Port for the global commit gate that ensures write consistency across regions. Coordinates
   * distributed consensus before allowing commits to proceed.
   */
 trait CommitGatePort:
   /** Requests approval for a commit from the global commit gate. This ensures no conflicting writes
-    * are happening across regions.
+    * are happening across regions. Use with caution - may block indefinitely.
     */
   def requestCommitApproval(request: CommitRequest): IO[SyncError, CommitApproval]
+
+  /** Requests approval for a commit with a timeout. Preferred for preventing indefinite blocking. */
+  def requestCommitApprovalWithTimeout(
+      request: CommitRequest,
+      timeout: Duration
+  ): IO[SyncError, CommitApproval]
 
   /** Notifies the commit gate that a commit has been completed in a region. Used for cleanup and
     * releasing locks.
@@ -72,3 +78,9 @@ object CommitGatePort:
 
   def getCommitStatus(commitId: CommitId): ZIO[CommitGatePort, SyncError, CommitStatus] =
     ZIO.serviceWithZIO[CommitGatePort](_.getCommitStatus(commitId))
+
+  def requestCommitApprovalWithTimeout(
+      request: CommitRequest,
+      timeout: Duration
+  ): ZIO[CommitGatePort, SyncError, CommitApproval] =
+    ZIO.serviceWithZIO[CommitGatePort](_.requestCommitApprovalWithTimeout(request, timeout))

@@ -3,12 +3,15 @@ package com.streamfirst.iceberg.hybrid.ports
 import com.streamfirst.iceberg.hybrid.domain.DomainError.SyncError
 import com.streamfirst.iceberg.hybrid.domain.{
   EventId,
+  PaginatedResult,
+  PaginationRequest,
   Region,
   StoragePath,
   SyncEvent,
   TableId,
   TableMetadata
 }
+import zio.stream.ZStream
 import zio.{IO, ZIO}
 
 /** Port for managing inter-region synchronization events. Coordinates the replication of metadata
@@ -20,9 +23,18 @@ trait SyncPort:
   def publishSyncEvent(event: SyncEvent): IO[SyncError, Unit]
 
   /** Gets sync events matching the specified criteria. Provides flexible querying for complex
-    * synchronization scenarios.
+    * synchronization scenarios. Use with caution for large result sets.
     */
   def getSyncEvents(predicate: SyncEvent => Boolean): IO[SyncError, List[SyncEvent]]
+
+  /** Streams sync events matching the specified criteria. Preferred for large result sets. */
+  def getSyncEventsStream(predicate: SyncEvent => Boolean): ZStream[Any, SyncError, SyncEvent]
+
+  /** Streams sync events with pagination support for controlled memory usage. */
+  def getSyncEventsPaginated(
+      predicate: SyncEvent => Boolean,
+      pagination: PaginationRequest
+  ): IO[SyncError, PaginatedResult[SyncEvent]]
 
   /** Gets all pending sync events for a target region. Used by regional sync workers to process
     * their queue.
@@ -99,3 +111,12 @@ object SyncPort:
 
   def retryFailedEvent(eventId: EventId): ZIO[SyncPort, SyncError, Unit] =
     ZIO.serviceWithZIO[SyncPort](_.retryFailedEvent(eventId))
+
+  def getSyncEventsStream(predicate: SyncEvent => Boolean): ZStream[SyncPort, SyncError, SyncEvent] =
+    ZStream.serviceWithStream[SyncPort](_.getSyncEventsStream(predicate))
+
+  def getSyncEventsPaginated(
+      predicate: SyncEvent => Boolean,
+      pagination: PaginationRequest
+  ): ZIO[SyncPort, SyncError, PaginatedResult[SyncEvent]] =
+    ZIO.serviceWithZIO[SyncPort](_.getSyncEventsPaginated(predicate, pagination))

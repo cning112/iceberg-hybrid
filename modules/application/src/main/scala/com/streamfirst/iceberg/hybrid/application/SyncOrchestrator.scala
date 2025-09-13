@@ -1,9 +1,9 @@
 package com.streamfirst.iceberg.hybrid.application
 
 import com.streamfirst.iceberg.hybrid.domain.DomainError.{CatalogError, StorageError, SyncError}
-import com.streamfirst.iceberg.hybrid.domain.{DomainError, Region, StoragePath, SyncEvent, TableId}
+import com.streamfirst.iceberg.hybrid.domain.{DomainError, Region, StoragePath, SyncEvent, SyncProgress, TableId}
 import com.streamfirst.iceberg.hybrid.ports.{CatalogPort, RegistryPort, StoragePort, SyncPort}
-import zio.{IO, ZIO, ZLayer}
+import zio.{IO, Ref, ZIO, ZLayer}
 
 /** Orchestrates synchronization operations between regions. Processes sync events and coordinates
   * data/metadata replication using ZIO effects for composable, type-safe operations.
@@ -14,18 +14,33 @@ final case class SyncOrchestrator(
     catalogPort: CatalogPort,
     registryPort: RegistryPort
 ):
-  /** Processes all pending sync events for a specific region. This method is typically called by a
+  /** Processes all pending sync events for a specific region with progress tracking. This method is typically called by a
     * scheduled worker process.
     */
-  def processPendingEvents(region: Region): IO[SyncError, Int] =
+  def processPendingEvents(region: Region): IO[SyncError, SyncProgress] =
     for
       _ <- ZIO.logInfo(s"Processing pending sync events for region ${region.id}")
       pendingEvents <- syncPort.getPendingEvents(region)
-      results <- ZIO.foreachPar(pendingEvents)(processSyncEvent)
-      successCount = results.count(identity)
-      _ <- ZIO.logInfo(s"Processed $successCount out of ${pendingEvents
-          .size} pending events for region ${region.id}")
-    yield successCount
+      initialProgress = SyncProgress.start(pendingEvents.size)
+      progressRef <- Ref.make(initialProgress)
+
+      _ <- ZIO.logInfo(s"Starting processing of ${pendingEvents.size} pending events for region ${region.id}")
+
+      _ <- ZIO.foreachPar(pendingEvents) { event =>
+        processSyncEvent(event).flatMap { success =>
+          progressRef.updateAndGet(_.withEventProcessed(success)).flatMap { progress =>
+            if progress.processedEvents % 10 == 0 || progress.processedEvents == progress.totalEvents then
+              ZIO.logInfo(s"Progress: ${progress.processedEvents}/${progress.totalEvents} events processed " +
+                s"(${progress.percentComplete.formatted("%.1f")}% complete) for region ${region.id}")
+            else ZIO.unit
+          }
+        }
+      }
+
+      finalProgress <- progressRef.get
+      _ <- ZIO.logInfo(s"Completed processing: ${finalProgress.successfulEvents} successful, " +
+        s"${finalProgress.failedEvents} failed out of ${finalProgress.totalEvents} events for region ${region.id}")
+    yield finalProgress
 
   /** Processes a single synchronization event based on its type. */
   private def processSyncEvent(event: SyncEvent): IO[SyncError, Boolean] =
